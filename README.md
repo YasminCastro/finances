@@ -29,3 +29,4 @@ Cada endereço novo onde o site rodar (ex.: `https://seu-app.vercel.app`) precis
 - `src/pages/`: Visão geral e Lançamentos
 
 A planilha tem uma aba **LEIA-ME** que explica cada aba e coluna.
+# finances
