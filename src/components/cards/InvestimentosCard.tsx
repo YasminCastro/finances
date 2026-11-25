@@ -1,7 +1,7 @@
 import { PiggyBank } from 'lucide-react'
 import { fmt, investimentosResumo, mesCurto } from '../../lib/finance'
 import type { Model } from '../../lib/model'
-import { Bar, Card, CardTitle, Money } from '../ui'
+import { Bar, Card, CardTitle, Money } from '../kit'
 
 const CORES = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#e11d48']
 

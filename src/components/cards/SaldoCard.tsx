@@ -1,7 +1,10 @@
 import { ArrowDownRight, ArrowUpRight, Wallet } from 'lucide-react'
-import { brl, mesCurto, pct } from '../../lib/finance'
+import { useState } from 'react'
+import { brl, fmt, mesCurto, pct } from '../../lib/finance'
 import type { ResumoMes } from '../../lib/finance'
-import { Button, Card, Money, cx } from '../ui'
+import { num } from '../../lib/model'
+import type { Entrada } from '../../lib/model'
+import { Button, Card, Money, cx, inputCls } from '../kit'
 
 export interface PontoHistorico {
   mes: string
@@ -12,12 +15,12 @@ export interface PontoHistorico {
 export function SaldoCard({
   r,
   historico,
-  onLancarFixos,
+  onLancarEntradas,
   busy,
 }: {
   r: ResumoMes
   historico: PontoHistorico[]
-  onLancarFixos: () => void
+  onLancarEntradas: (itens: { descricao: string; valor: number }[]) => void
   busy: boolean
 }) {
   const base = Math.max(r.entradas, r.saidas, 1)
@@ -61,7 +64,7 @@ export function SaldoCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
-        <Legend label="Entradas" valor={brl(r.entradas)} />
+        <Legend label={r.entradasProjetadas ? 'Entradas (estimadas)' : 'Entradas'} valor={brl(r.entradas)} />
         {segs.map((s) => (
           <Legend
             key={s.label}
@@ -83,25 +86,63 @@ export function SaldoCard({
 
       <Historico pontos={historico} />
 
-      {(r.fixosProjetados || r.investido !== 0) && (
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
-          {r.fixosProjetados && (
-            <>
-              <span className="rounded-full bg-warn-soft px-2.5 py-1 text-xs font-semibold text-warn">fixos estimados</span>
-              <span className="text-muted">Os fixos deste mês vêm do modelo da aba “fixos”.</span>
-              <Button onClick={onLancarFixos} disabled={busy} className="py-1.5 text-xs">
-                Lançar fixos no mês
-              </Button>
-            </>
-          )}
-          {r.investido !== 0 && (
-            <span className="text-muted sm:ml-auto">
-              Investido no mês: <b className="text-ink">{brl(r.investido)}</b>
-            </span>
-          )}
+      {r.entradasProjetadas && (
+        <EntradasEstimadas
+          key={r.entradasItens.map((e) => e.id + e.valor).join()}
+          itens={r.entradasItens.filter((e) => e.projetado)}
+          busy={busy}
+          onConfirmar={onLancarEntradas}
+        />
+      )}
+
+      {r.investido !== 0 && (
+        <div className="mt-5 border-t border-line pt-4 text-right text-sm text-muted">
+          Investido no mês: <b className="text-ink">{brl(r.investido)}</b>
         </div>
       )}
     </Card>
+  )
+}
+
+function EntradasEstimadas({
+  itens,
+  busy,
+  onConfirmar,
+}: {
+  itens: Entrada[]
+  busy: boolean
+  onConfirmar: (itens: { descricao: string; valor: number }[]) => void
+}) {
+  const [valores, setValores] = useState(() => itens.map((e) => fmt(e.valor)))
+  return (
+    <div className="mt-5 rounded-2xl border border-warn/30 bg-warn-soft/50 p-3 text-sm">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="rounded-full bg-warn-soft px-2.5 py-1 text-xs font-semibold text-warn">entrada estimada</span>
+        <span className="text-muted">Quando receber, confirme o valor para lançar no mês.</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {itens.map((e, k) => (
+          <label key={e.id} className="flex items-center gap-2">
+            <span className="font-semibold">{e.descricao}</span>
+            <span className="text-muted">R$</span>
+            <input
+              inputMode="decimal"
+              value={valores[k]}
+              onChange={(ev) => setValores((v) => v.map((x, j) => (j === k ? ev.target.value : x)))}
+              className={cx(inputCls, 'w-28 py-1.5')}
+            />
+          </label>
+        ))}
+        <Button
+          variant="primary"
+          disabled={busy}
+          className="py-1.5 text-xs"
+          onClick={() => onConfirmar(itens.map((e, k) => ({ descricao: e.descricao, valor: num(valores[k]) })).filter((e) => e.valor))}
+        >
+          Confirmar recebimento
+        </Button>
+      </div>
+    </div>
   )
 }
 

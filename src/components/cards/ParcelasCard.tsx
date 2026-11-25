@@ -1,7 +1,7 @@
 import { Layers } from 'lucide-react'
 import { addMeses, fmt, mesCurto, parcelasPorMes } from '../../lib/finance'
 import type { Lancamento, Model } from '../../lib/model'
-import { Card, CardTitle, Empty, Money, cx } from '../ui'
+import { Card, CardTitle, Empty, Money, cx } from '../kit'
 
 export function ParcelasCard({ model, mes, itens }: { model: Model; mes: string; itens: Lancamento[] }) {
   const serie = parcelasPorMes(model, mes, 12)

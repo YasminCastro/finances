@@ -2,7 +2,7 @@ import { CalendarCheck, Check } from 'lucide-react'
 import { useState } from 'react'
 import { dataCurta, fmt } from '../../lib/finance'
 import type { Conta } from '../../lib/finance'
-import { Card, Empty, Money, cx } from '../ui'
+import { Card, Empty, Money, cx } from '../kit'
 
 export function ContasCard({
   contas,

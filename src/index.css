@@ -25,6 +25,22 @@
   --color-seg-1: #1e3a8a;
   --color-seg-2: #2563eb;
   --color-seg-3: #7aa7ff;
+
+  /* Nomes usados pelos componentes shadcn/ui, apontando para as cores do app */
+  --color-background: var(--color-card);
+  --color-foreground: var(--color-ink);
+  --color-popover: var(--color-card);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-soft);
+  --color-secondary-foreground: var(--color-ink);
+  --color-accent: var(--color-soft);
+  --color-accent-foreground: var(--color-ink);
+  --color-muted-foreground: var(--color-muted);
+  --color-destructive: var(--color-bad);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-primary);
 }
 
 .dark {

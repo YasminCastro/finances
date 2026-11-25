@@ -1,12 +1,15 @@
+import { escFecha } from '@/lib/utils'
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { addMeses, brl, hoje, mesCurto } from '../lib/finance'
+import { addMeses, brl, dataCurta, faturaDaCompra, formaDe, hoje, mesCurto } from '../lib/finance'
 import { num } from '../lib/model'
 import type { Model } from '../lib/model'
 import type { Finance } from '../lib/store'
-import { Button, Field, cx, inputCls } from './ui'
+import { Button, Field, cx, inputCls } from './kit'
 
+import { Dropdown } from './Dropdown'
+import { DatePicker, MonthPicker } from './pickers'
 import { ADD_KINDS } from './addKinds'
 import type { AddKind } from './addKinds'
 
@@ -42,13 +45,19 @@ export function AddModal({
   const set = (k: string) => (v: string) => setF((p) => ({ ...p, [k]: v }))
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => escFecha(e, onClose)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
   const valor = num(f.valor)
   const parcelas = Math.max(1, Math.round(num(f.total_parcelas)))
+
+  // Compra no cartão: o mês de referência sai da data da compra e do fechamento da fatura,
+  // a menos que você escolha o mês manualmente.
+  const usaFatura = kind === 'gasto' || kind === 'parcelado'
+  const fatura = usaFatura ? faturaDaCompra(formaDe(model, f.forma_pagamento ?? ''), kind === 'gasto' ? f.data : hoje()) : null
+  const mesRef = fatura && f.mes_manual !== 'sim' ? fatura.mes_ref : f.mes_ref
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -63,7 +72,7 @@ export function AddModal({
     switch (kind) {
       case 'gasto':
         ok = await a.append('lancamentos', 'L', [
-          { mes_ref: f.mes_ref, data: f.data, descricao: d, valor, categoria: f.categoria, forma_pagamento: f.forma_pagamento, tipo: 'gasto' },
+          { mes_ref: mesRef, data: f.data, descricao: d, valor, categoria: f.categoria, forma_pagamento: f.forma_pagamento, tipo: 'gasto' },
         ])
         break
       case 'parcelado':
@@ -71,31 +80,36 @@ export function AddModal({
           descricao: d,
           valor_parcela: valor,
           total_parcelas: parcelas,
-          mes_primeira_parcela: f.mes_ref,
+          mes_primeira_parcela: mesRef,
           categoria: f.categoria,
           forma_pagamento: f.forma_pagamento,
         })
         break
       case 'fixo':
-        ok = await a.append('fixos', 'F', [
+        ok = await a.novoFixo(
+          'fixos',
           {
             descricao: d,
             valor,
             categoria: f.categoria,
             forma_pagamento: f.forma_pagamento,
             dia_vencimento: f.dia_vencimento ? Number(f.dia_vencimento) : '',
-            ativo: 'sim',
           },
-        ])
+          mesRef,
+        )
         break
       case 'entrada':
-        ok = await a.append('entradas', 'E', [{ mes_ref: f.mes_ref, descricao: d, valor }])
+        if (f.recorrente === 'sim') {
+          ok = await a.novoFixo('entradas_fixas', { descricao: d, valor }, mesRef)
+          if (!ok) break
+        }
+        ok = await a.append('entradas', 'E', [{ mes_ref: mesRef, descricao: d, valor }])
         break
       case 'investimento':
-        ok = await a.append('investimentos', 'I', [{ mes_ref: f.mes_ref, data: hoje(), destino: f.destino, valor, descricao: d }])
+        ok = await a.append('investimentos', 'I', [{ mes_ref: mesRef, data: hoje(), destino: f.destino, valor, descricao: d }])
         break
       case 'receber':
-        ok = await a.append('a_receber', 'R', [{ pessoa: f.pessoa.trim(), descricao: d, mes_ref: f.mes_ref, valor, recebido: 'não' }])
+        ok = await a.append('a_receber', 'R', [{ pessoa: f.pessoa.trim(), descricao: d, mes_ref: mesRef, valor, recebido: 'não' }])
         break
     }
     if (ok) onClose()
@@ -104,22 +118,39 @@ export function AddModal({
   const opts = (xs: string[]) => xs.map((x) => <option key={x}>{x}</option>)
   const categoria = (
     <Field label="Categoria">
-      <select className={inputCls} value={f.categoria ?? ''} onChange={(e) => set('categoria')(e.target.value)}>
-        {opts(model.categorias.map((c) => c.nome))}
-      </select>
+      <Dropdown value={f.categoria ?? ''} onChange={set('categoria')} opcoes={model.categorias.map((c) => ({ value: c.nome, label: c.nome, cor: c.cor }))} />
     </Field>
   )
   const forma = (
     <Field label="Forma de pagamento">
-      <select className={inputCls} value={f.forma_pagamento ?? ''} onChange={(e) => set('forma_pagamento')(e.target.value)}>
-        {opts(model.formas.map((c) => c.nome))}
-      </select>
+      <Dropdown value={f.forma_pagamento ?? ''} onChange={set('forma_pagamento')} opcoes={model.formas.map((c) => ({ value: c.nome, label: c.nome, cor: c.cor || undefined }))} />
     </Field>
   )
   const mesField = (label = 'Mês de referência') => (
     <Field label={label}>
-      <input type="month" className={inputCls} value={f.mes_ref ?? ''} onChange={(e) => set('mes_ref')(e.target.value)} required />
+      <MonthPicker
+        value={mesRef ?? ''}
+        onChange={(m) => setF((p) => ({ ...p, mes_ref: m, mes_manual: 'sim' }))}
+      />
     </Field>
+  )
+
+  const dicaFatura = fatura && (
+    <div className="rounded-xl bg-soft px-3 py-2 text-xs text-muted">
+      {f.mes_manual === 'sim' && mesRef !== fatura.mes_ref ? (
+        <>
+          Pela data, iria para a fatura de <b className="text-ink">{mesCurto(fatura.mes_ref)}</b>, mas você escolheu {mesCurto(mesRef)}.{' '}
+          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setF((p) => ({ ...p, mes_manual: '' }))}>
+            Usar automático
+          </button>
+        </>
+      ) : (
+        <>
+          Entra na fatura <b className="text-ink">{f.forma_pagamento}</b> que fecha em {dataCurta(fatura.fechamento)} e vence em{' '}
+          {dataCurta(fatura.vencimento)} → mês de referência <b className="text-ink">{mesCurto(fatura.mes_ref)}</b>.
+        </>
+      )}
+    </div>
   )
 
   let campos: ReactNode = null
@@ -128,7 +159,7 @@ export function AddModal({
       <>
         <Row>
           <Field label="Data">
-            <input type="date" className={inputCls} value={f.data ?? ''} onChange={(e) => set('data')(e.target.value)} />
+            <DatePicker value={f.data ?? ''} onChange={set('data')} />
           </Field>
           {mesField()}
         </Row>
@@ -136,6 +167,7 @@ export function AddModal({
           {categoria}
           {forma}
         </Row>
+        {dicaFatura}
       </>
     )
   if (kind === 'parcelado')
@@ -151,10 +183,11 @@ export function AddModal({
           {categoria}
           {forma}
         </Row>
-        {valor > 0 && f.mes_ref && (
+        {dicaFatura}
+        {valor > 0 && mesRef && (
           <div className="rounded-xl bg-primary-soft px-3 py-2 text-xs text-primary">
-            {parcelas}× de {brl(valor)} = <b>{brl(valor * parcelas)}</b>, de {mesCurto(f.mes_ref)} até{' '}
-            {mesCurto(addMeses(f.mes_ref, parcelas - 1))}. Cada parcela vira uma linha em “lancamentos”.
+            {parcelas}× de {brl(valor)} = <b>{brl(valor * parcelas)}</b>, de {mesCurto(mesRef)} até{' '}
+            {mesCurto(addMeses(mesRef, parcelas - 1))}. Cada parcela vira uma linha em “lancamentos”.
           </div>
         )}
       </>
@@ -166,23 +199,49 @@ export function AddModal({
           {categoria}
           {forma}
         </Row>
-        <Field label="Dia de vencimento (opcional; cartões usam o vencimento da fatura)">
-          <input type="number" min={1} max={31} className={inputCls} value={f.dia_vencimento ?? ''} onChange={(e) => set('dia_vencimento')(e.target.value)} />
-        </Field>
-        <p className="text-xs text-muted">
-          A conta entra no modelo de fixos e aparece automaticamente nos meses que ainda não tiveram os fixos lançados.
-        </p>
+        <Row>
+          <Field label="Dia de vencimento (opcional)">
+            <input type="number" min={1} max={31} className={inputCls} value={f.dia_vencimento ?? ''} onChange={(e) => set('dia_vencimento')(e.target.value)} />
+          </Field>
+          {mesField('Começa em')}
+        </Row>
+        <p className="text-xs text-muted">A conta aparece todo mês a partir do mês escolhido. Para alterar ou encerrar depois, use a página Fixos.</p>
       </>
     )
-  if (kind === 'entrada') campos = mesField()
+  if (kind === 'entrada') {
+    const jaFixa = model.entradasFixas.some((e) => e.ativo && e.descricao.toLowerCase() === f.descricao?.trim().toLowerCase())
+    campos = (
+      <>
+        {mesField()}
+        {jaFixa ? (
+          <p className="text-xs text-muted">
+            “{f.descricao.trim()}” já é uma entrada fixa: aparece estimada todo mês. Lançar aqui confirma o valor deste mês.
+          </p>
+        ) : (
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 accent-(--color-primary)"
+              checked={f.recorrente === 'sim'}
+              onChange={(e) => set('recorrente')(e.target.checked ? 'sim' : '')}
+            />
+            <span>
+              <b>Repetir todo mês</b>
+              <span className="block text-xs text-muted">
+                Vira uma entrada fixa (como o salário) e aparece estimada nos próximos meses até você confirmar.
+              </span>
+            </span>
+          </label>
+        )}
+      </>
+    )
+  }
   if (kind === 'investimento')
     campos = (
       <>
         <Row>
           <Field label="Destino">
-            <select className={inputCls} value={f.destino ?? ''} onChange={(e) => set('destino')(e.target.value)}>
-              {opts(model.destinos)}
-            </select>
+            <Dropdown value={f.destino ?? ''} onChange={set('destino')} opcoes={model.destinos.map((d) => ({ value: d, label: d }))} />
           </Field>
           {mesField()}
         </Row>

@@ -20,7 +20,9 @@ export function Overview({ model, mes, finance }: { model: Model; mes: string; f
   })
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
-      <SaldoCard r={r} historico={historico} busy={busy} onLancarFixos={() => actions.lancarFixos(mes, r.itens)} />
+      <SaldoCard r={r} historico={historico} busy={busy}
+        onLancarEntradas={(itens) => actions.lancarEntradas(mes, itens)}
+      />
       <ContasCard contas={contas} busy={busy} onToggle={(c) => actions.togglePago(mes, c)} />
       <CartoesCard model={model} mes={mes} />
       <CategoriasCard cats={categoriasDoMes(model, mes)} />

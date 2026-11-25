@@ -2,7 +2,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   LayoutDashboard,
   List,
   LoaderCircle,
@@ -10,6 +9,8 @@ import {
   Moon,
   Plus,
   RefreshCw,
+  Repeat,
+  Settings,
   Sun,
   X,
 } from 'lucide-react'
@@ -18,18 +19,22 @@ import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
 import { ADD_KINDS } from './components/addKinds'
 import type { AddKind } from './components/addKinds'
-import { Button, cx } from './components/ui'
+import { Button, cx } from './components/kit'
 import { addMeses, mesAtual, nomeMes } from './lib/finance'
-import { SPREADSHEET_URL } from './lib/google'
 import { useFinance } from './lib/store'
+import { MonthPicker } from './components/pickers'
+import { Config } from './pages/Config'
+import { Fixos } from './pages/Fixos'
 import { Lancamentos } from './pages/Lancamentos'
 import { Overview } from './pages/Overview'
 
-type Page = 'overview' | 'lancamentos'
+type Page = 'overview' | 'lancamentos' | 'fixos' | 'config'
 const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Visão geral', icon: <LayoutDashboard size={18} /> },
   { id: 'lancamentos', label: 'Lançamentos', icon: <List size={18} /> },
+  { id: 'fixos', label: 'Fixos', icon: <Repeat size={18} /> },
 ]
+const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
 
 function useTheme() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -64,27 +69,14 @@ export default function App() {
         <div className="mt-8 mb-2 px-2 text-xs font-medium text-faint">Menu</div>
         <nav className="space-y-1">
           {PAGES.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPage(p.id)}
-              className={cx(
-                'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
-                page === p.id ? 'bg-soft font-semibold text-ink' : 'text-muted hover:bg-soft hover:text-ink',
-              )}
-            >
-              <span className={page === p.id ? 'text-primary' : ''}>{p.icon}</span>
-              {p.label}
-            </button>
+            <NavItem key={p.id} item={p} ativo={page === p.id} onClick={() => setPage(p.id)} />
           ))}
-          <a
-            href={SPREADSHEET_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-soft hover:text-ink"
-          >
-            <ExternalLink size={18} />
-            Abrir planilha
-          </a>
+        </nav>
+        <div className="mt-6 mb-2 px-2 text-xs font-medium text-faint">Ajustes</div>
+        <nav className="space-y-1">
+          {AJUSTES.map((p) => (
+            <NavItem key={p.id} item={p} ativo={page === p.id} onClick={() => setPage(p.id)} />
+          ))}
         </nav>
         <div className="mt-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl px-2 text-sm text-muted">
@@ -112,19 +104,14 @@ export default function App() {
             <IconBtn label="Mês anterior" onClick={() => setMes(addMeses(mes, -1))}>
               <ChevronLeft size={18} />
             </IconBtn>
-            <label className="relative flex min-w-0 cursor-pointer items-center gap-1">
-              <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
-                {nomeMes(mes)} <span className="font-semibold text-muted">{mes.slice(0, 4)}</span>
-              </h1>
-              <ChevronDown size={16} className="shrink-0 text-muted" />
-              <input
-                type="month"
-                value={mes}
-                onChange={(e) => e.target.value && setMes(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="Escolher mês"
-              />
-            </label>
+            <MonthPicker value={mes} onChange={setMes}>
+              <button className="flex min-w-0 items-center gap-1 rounded-xl px-1.5 py-0.5 hover:bg-soft" aria-label="Escolher mês">
+                <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
+                  {nomeMes(mes)} <span className="font-semibold text-muted">{mes.slice(0, 4)}</span>
+                </h1>
+                <ChevronDown size={16} className="shrink-0 text-muted" />
+              </button>
+            </MonthPicker>
             <IconBtn label="Próximo mês" onClick={() => setMes(addMeses(mes, 1))}>
               <ChevronRight size={18} />
             </IconBtn>
@@ -155,6 +142,10 @@ export default function App() {
           </div>
         ) : page === 'overview' ? (
           <Overview model={model} mes={mes} finance={finance} />
+        ) : page === 'fixos' ? (
+          <Fixos model={model} mes={mes} finance={finance} />
+        ) : page === 'config' ? (
+          <Config model={model} finance={finance} dark={dark} setDark={setDark} />
         ) : (
           <Lancamentos model={model} mes={mes} finance={finance} />
         )}
@@ -162,7 +153,7 @@ export default function App() {
 
       {/* Navegação (celular) */}
       <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-2xl border border-line bg-card/95 p-1.5 shadow-lg backdrop-blur lg:hidden">
-        {PAGES.map((p) => (
+        {[...PAGES, { ...AJUSTES[0], label: 'Ajustes' }].map((p) => (
           <button
             key={p.id}
             onClick={() => setPage(p.id)}
@@ -172,14 +163,6 @@ export default function App() {
             {p.label}
           </button>
         ))}
-        <a href={SPREADSHEET_URL} target="_blank" rel="noreferrer" className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium text-muted">
-          <ExternalLink size={18} />
-          Planilha
-        </a>
-        <button onClick={() => setDark(!dark)} className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium text-muted">
-          {dark ? <Sun size={18} /> : <Moon size={18} />}
-          Tema
-        </button>
         <button onClick={logout} className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium text-muted">
           <LogOut size={18} />
           Sair
@@ -188,6 +171,21 @@ export default function App() {
 
       {add && model && <AddModal key={add} kind={add} setKind={setAdd} onClose={closeAdd} model={model} mes={mes} finance={finance} />}
     </div>
+  )
+}
+
+function NavItem({ item, ativo, onClick }: { item: { label: string; icon: ReactNode }; ativo: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cx(
+        'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+        ativo ? 'bg-soft font-semibold text-ink' : 'text-muted hover:bg-soft hover:text-ink',
+      )}
+    >
+      <span className={ativo ? 'text-primary' : ''}>{item.icon}</span>
+      {item.label}
+    </button>
   )
 }
 

@@ -1,9 +1,9 @@
 import { ChevronLeft, ChevronRight, CreditCard, Wifi } from 'lucide-react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { addMeses, dataCurta, faturaCartao, fmt, mesCurto, vencimentoFatura } from '../../lib/finance'
+import { addMeses, dataCurta, faturaCartao, fechamentoFatura, fmt, limiteCartao, mesCurto, vencimentoFatura } from '../../lib/finance'
 import type { Model } from '../../lib/model'
-import { Card, CardTitle, Empty, Money, cx } from '../ui'
+import { Card, CardTitle, Empty, Money, cx } from '../kit'
 
 export function CartoesCard({ model, mes }: { model: Model; mes: string }) {
   const cartoes = model.formas.filter((f) => f.cartao)
@@ -25,6 +25,8 @@ export function CartoesCard({ model, mes }: { model: Model; mes: string }) {
   })
   const maxProx = Math.max(...proximas.map((p) => p.valor), 1)
   const venc = vencimentoFatura(c, mes)
+  const fech = fechamentoFatura(c, mes)
+  const lim = limiteCartao(model, c)
   const cor = c.cor || '#334155'
 
   return (
@@ -61,13 +63,21 @@ export function CartoesCard({ model, mes }: { model: Model; mes: string }) {
           </div>
           <div className="h-7 w-10 rounded-md bg-gradient-to-br from-yellow-200 to-yellow-500 opacity-90" />
           <div className="flex items-end justify-between text-xs">
-            <div>
-              <div className="text-[10px] tracking-wider uppercase opacity-70">Vence</div>
-              <div className="font-semibold">{venc ? dataCurta(venc) : '—'}</div>
+            <div className="flex gap-4">
+              {fech && (
+                <div>
+                  <div className="text-[10px] tracking-wider uppercase opacity-70">Fecha</div>
+                  <div className="font-semibold">{dataCurta(fech)}</div>
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] tracking-wider uppercase opacity-70">Vence</div>
+                <div className="font-semibold">{venc ? dataCurta(venc) : '—'}</div>
+              </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] tracking-wider uppercase opacity-70">Fatura</div>
-              <div className="font-semibold">R$ {fmt(atual)}</div>
+              <div className="text-[10px] tracking-wider uppercase opacity-70">{lim ? 'Limite livre' : 'Fatura'}</div>
+              <div className="font-semibold">R$ {fmt(lim ? lim.livre : atual)}</div>
             </div>
           </div>
         </div>

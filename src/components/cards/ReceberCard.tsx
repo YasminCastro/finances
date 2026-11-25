@@ -1,7 +1,7 @@
 import { Check, HandCoins } from 'lucide-react'
 import { fmt, mesCurto, receberPendente } from '../../lib/finance'
 import type { Model, Receber } from '../../lib/model'
-import { Card, CardTitle, Empty, Money } from '../ui'
+import { Card, CardTitle, Empty, Money } from '../kit'
 
 export function ReceberCard({ model, onToggle, busy }: { model: Model; onToggle: (r: Receber) => void; busy: boolean }) {
   const { total, pessoas } = receberPendente(model)

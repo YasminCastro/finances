@@ -1,9 +1,12 @@
 import { Search, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { dataCurta, fmt, resumoMes } from '../lib/finance'
+import { corCategoria } from '../lib/model'
 import type { Lancamento, Model } from '../lib/model'
 import type { Finance } from '../lib/store'
-import { Card, Empty, cx, inputCls } from '../components/ui'
+import { Card, Empty, cx, inputCls } from '../components/kit'
+import { Dropdown } from '../components/Dropdown'
+import { ordemAlfabetica } from '../lib/cores'
 
 const TIPOS = [
   { id: '', label: 'Todos' },
@@ -34,7 +37,7 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
       .sort((a, b) => (b.data || '').localeCompare(a.data || '') || a.tipo.localeCompare(b.tipo))
   }, [r.itens, tipo, forma, q])
   const total = lista.reduce((a, l) => a + l.valor, 0)
-  const formas = [...new Set(r.itens.map((l) => l.forma_pagamento).filter(Boolean))].sort()
+  const formas = [...new Set(r.itens.map((l) => l.forma_pagamento).filter(Boolean))].sort(ordemAlfabetica)
 
   async function excluir(l: Lancamento, futuras: boolean) {
     const alvo = futuras
@@ -63,12 +66,15 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
         </div>
         <div className="flex gap-2">
           <div className="w-40 shrink-0">
-            <select className={cx(inputCls, 'py-2')} value={forma} onChange={(e) => setForma(e.target.value)}>
-              <option value="">Todas as formas</option>
-              {formas.map((f) => (
-                <option key={f}>{f}</option>
-              ))}
-            </select>
+            <Dropdown
+              className="py-2"
+              value={forma}
+              onChange={setForma}
+              opcoes={[
+                { value: '', label: 'Todas as formas' },
+                ...formas.map((f) => ({ value: f, label: f, cor: model.formas.find((x) => x.nome === f)?.cor || undefined })),
+              ]}
+            />
           </div>
           <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
             <Search size={16} className="absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
@@ -97,12 +103,13 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold">{l.descricao}</span>
                   <span className={cx('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', tipoCor[l.tipo])}>
-                    {l.projetado ? 'fixo (modelo)' : l.tipo}
+                    {l.projetado ? 'fixo' : l.tipo === 'fixo' && l.fixo_id ? 'fixo · ajuste do mês' : l.tipo}
                     {l.tipo === 'parcela' && l.parcelas_restantes ? ` · faltam ${l.parcelas_restantes}` : ''}
                   </span>
                 </div>
                 <div className="truncate text-xs text-muted">
                   <span className="sm:hidden">{l.data ? dataCurta(l.data) + ' · ' : ''}</span>
+                  <span className="mr-1 inline-block size-2 rounded-full align-middle" style={{ background: corCategoria(model, l.categoria) }} />
                   {l.categoria} · {l.forma_pagamento || 'sem forma'}
                 </div>
               </div>
@@ -146,7 +153,8 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
         </ul>
       )}
       <p className="mt-4 text-xs text-muted">
-        Para editar um valor ou descrição, altere direto na planilha (aba “lancamentos”) e clique em atualizar.
+        Contas fixas são editadas na página Fixos. Para editar outros lançamentos, altere direto na planilha (aba “lancamentos”) e clique em
+        atualizar.
       </p>
     </Card>
   )

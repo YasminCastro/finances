@@ -11,11 +11,15 @@ import {
   newId,
   signIn,
   signOut,
+  renomearReferencias,
   updateRow,
 } from './google'
-import type { Cell, DB, Tab } from './google'
+import type { Cell, DB, Row, Tab } from './google'
 import { buildModel } from './model'
-import type { Lancamento, Model, Receber } from './model'
+import type { Fixo, Lancamento, Model, Receber, VersaoFixa } from './model'
+
+export type TabFixa = 'fixos' | 'entradas_fixas'
+export type TabConfig = 'formas_pagamento' | 'categorias' | 'destinos_investimento'
 
 export interface NovoParcelado {
   descricao: string
@@ -50,18 +54,25 @@ export function useFinance() {
     setError(e instanceof Error ? e.message : String(e))
   }, [])
 
-  const reload = useCallback(async () => {
+  const inflight = useRef<Promise<void> | null>(null)
+  const reload = useCallback(() => {
     const t = tokenRef.current
-    if (!t) return
+    if (!t) return Promise.resolve()
+    // Evita duas cargas simultâneas (o React em modo dev roda efeitos duas vezes).
+    if (inflight.current) return inflight.current
     setLoading(true)
-    try {
-      setDb(await loadDB(t))
-      setError(null)
-    } catch (e) {
-      handle(e)
-    } finally {
-      setLoading(false)
-    }
+    inflight.current = (async () => {
+      try {
+        setDb(await loadDB(t))
+        setError(null)
+      } catch (e) {
+        handle(e)
+      } finally {
+        setLoading(false)
+        inflight.current = null
+      }
+    })()
+    return inflight.current
   }, [handle])
 
   useEffect(() => {
@@ -132,25 +143,79 @@ export function useFinance() {
           await appendRows(t, d, 'lancamentos', linhas)
         }),
 
-      /** Copia o modelo de fixos para o mês (passa a ser editável mês a mês). */
-      lancarFixos: (mes: string, itens: Lancamento[]) =>
+      // ----- configurações (formas de pagamento, categorias, destinos) -----
+
+      /** Cria (row ausente) ou edita um item. Renomear também atualiza os lançamentos que usam o nome. */
+      salvarConfig: (tab: TabConfig, row: Row | undefined, valores: Record<string, Cell>) =>
+        run(async (t, d) => {
+          if (!row) return appendRows(t, d, tab, [valores])
+          const antigo = String(row.nome).trim()
+          const novo = String(valores.nome).trim()
+          await updateRow(t, d, tab, row, valores)
+          if (antigo && novo && antigo !== novo) await renomearReferencias(t, d, tab, antigo, novo)
+        }),
+
+      excluirConfig: (tab: TabConfig, row: Row) => run((t, d) => deleteRows(t, d, tab, [row])),
+
+      // ----- contas fixas / entradas fixas (versões com período de validade) -----
+
+      novoFixo: (tab: TabFixa, campos: Record<string, Cell>, mesInicio: string) =>
+        run((t, d) => {
+          const id = newId(tab === 'fixos' ? 'F' : 'EF')
+          return appendRows(t, d, tab, [{ id, serie: id, ...campos, ativo: 'sim', mes_inicio: mesInicio, mes_fim: '' }])
+        }),
+
+      /** Altera a conta a partir de um mês: os meses anteriores mantêm o valor antigo. */
+      alterarFixo: (tab: TabFixa, v: VersaoFixa, campos: Record<string, Cell>, aPartirDe: string) =>
+        run(async (t, d) => {
+          if (v.mes_inicio && aPartirDe <= v.mes_inicio) {
+            await updateRow(t, d, tab, v.row, campos)
+            return
+          }
+          await updateRow(t, d, tab, v.row, { mes_fim: addMeses(aPartirDe, -1) })
+          await appendRows(t, d, tab, [
+            { id: newId(tab === 'fixos' ? 'F' : 'EF'), serie: v.serie, ...campos, ativo: 'sim', mes_inicio: aPartirDe, mes_fim: v.mes_fim },
+          ])
+        }),
+
+      /** Encerra a conta a partir de um mês (inclusive). */
+      encerrarFixo: (tab: TabFixa, versoes: VersaoFixa[], aPartirDe: string) =>
+        run(async (t, d) => {
+          for (const v of versoes) {
+            if (!v.ativo || (v.mes_fim && v.mes_fim < aPartirDe)) continue
+            if (v.mes_inicio && v.mes_inicio >= aPartirDe) await updateRow(t, d, tab, v.row, { ativo: 'não' })
+            else await updateRow(t, d, tab, v.row, { mes_fim: addMeses(aPartirDe, -1) })
+          }
+        }),
+
+      /** Valor diferente só em um mês (não mexe no modelo). */
+      ajustarFixoNoMes: (f: Fixo, campos: Record<string, Cell>, mes: string, existente?: Lancamento) =>
+        run((t, d) =>
+          existente?.row
+            ? updateRow(t, d, 'lancamentos', existente.row, campos)
+            : appendRows(t, d, 'lancamentos', [
+                {
+                  id: newId('L'),
+                  mes_ref: mes,
+                  data: '',
+                  categoria: f.categoria,
+                  forma_pagamento: f.forma_pagamento,
+                  descricao: f.descricao,
+                  ...campos,
+                  tipo: 'fixo',
+                  fixo_id: f.serie,
+                },
+              ]),
+        ),
+
+      /** Confirma no mês as entradas fixas estimadas (com os valores informados). */
+      lancarEntradas: (mes: string, itens: { descricao: string; valor: number }[]) =>
         run((t, d) =>
           appendRows(
             t,
             d,
-            'lancamentos',
-            itens
-              .filter((l) => l.projetado)
-              .map((l, k) => ({
-                id: newId('L') + k,
-                mes_ref: mes,
-                data: '',
-                descricao: l.descricao,
-                valor: l.valor,
-                categoria: l.categoria,
-                forma_pagamento: l.forma_pagamento,
-                tipo: 'fixo',
-              })),
+            'entradas',
+            itens.map((e, k) => ({ id: newId('E') + k, mes_ref: mes, descricao: e.descricao, valor: e.valor })),
           ),
         ),
 
