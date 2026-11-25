@@ -1,4 +1,4 @@
-import { Car, ChevronDown, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
+import { Car, ChevronDown, PiggyBank, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
@@ -15,14 +15,16 @@ import { Parcelamentos } from './pages/Parcelamentos'
 import { Overview } from './pages/Overview'
 import { Receber } from './pages/Receber'
 import { Carro } from './pages/Carro'
+import { Investimentos } from './pages/Investimentos'
 
-type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'carro' | 'config'
-const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
+type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'carro' | 'investimentos' | 'config'
+const PAGES: { id: Page; label: string; curto?: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Visão geral', icon: <LayoutDashboard size={18} /> },
   { id: 'lancamentos', label: 'Lançamentos', icon: <List size={18} /> },
   { id: 'fixos', label: 'Fixos', icon: <Repeat size={18} /> },
   { id: 'parcelamentos', label: 'Parcelas', icon: <Layers size={18} /> },
   { id: 'receber', label: 'A receber', icon: <HandCoins size={18} /> },
+  { id: 'investimentos', label: 'Investimentos', curto: 'Investir', icon: <PiggyBank size={18} /> },
   { id: 'carro', label: 'Carro', icon: <Car size={18} /> },
 ]
 const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
@@ -139,6 +141,8 @@ export default function App() {
           <Parcelamentos model={model} mes={mes} />
         ) : page === 'receber' ? (
           <Receber model={model} mes={mes} finance={finance} />
+        ) : page === 'investimentos' ? (
+          <Investimentos model={model} mes={mes} setMes={setMes} finance={finance} />
         ) : page === 'carro' ? (
           <Carro model={model} mes={mes} setMes={setMes} finance={finance} />
         ) : page === 'config' ? (
@@ -150,14 +154,14 @@ export default function App() {
 
       {/* Navegação (celular) */}
       <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-2xl border border-line bg-card/95 p-1.5 shadow-lg backdrop-blur lg:hidden">
-        {[...PAGES, { ...AJUSTES[0], label: 'Ajustes' }].map((p) => (
+        {[...PAGES, { ...AJUSTES[0], label: 'Ajustes', curto: undefined }].map((p) => (
           <button
             key={p.id}
             onClick={() => setPage(p.id)}
             className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium sm:text-[11px]', page === p.id ? 'text-primary' : 'text-muted')}
           >
             {p.icon}
-            {p.label}
+            <span className="max-w-full truncate">{p.curto ?? p.label}</span>
           </button>
         ))}
       </nav>

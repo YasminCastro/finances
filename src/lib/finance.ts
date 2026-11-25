@@ -471,9 +471,12 @@ export function investimentosResumo(model: Model, ateMes: string) {
   const destinos = new Map<string, number>()
   for (const d of model.destinos) destinos.set(d, 0)
   for (const i of ate) destinos.set(i.destino, (destinos.get(i.destino) ?? 0) + i.valor)
+  const centavos = (v: number) => Math.round(v * 100) / 100
+  // só onde ainda tem dinheiro: o que foi resgatado já foi usado e sai da conta
+  const lista = [...destinos.entries()].map(([nome, valor]) => ({ nome, valor: centavos(valor) })).filter((d) => d.valor > 0)
   return {
-    total: sum(ate),
-    destinos: [...destinos.entries()].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor),
+    total: centavos(lista.reduce((a, d) => a + d.valor, 0)),
+    destinos: lista.sort((a, b) => b.valor - a.valor),
   }
 }
 
@@ -551,4 +554,16 @@ export function lancamentosCarro(model: Model, mes: string): { l: Lancamento; cu
     .itens.map((l) => ({ l, custo: custoCarro(l) }))
     .filter((x): x is { l: Lancamento; custo: CustoCarro } => x.custo !== null)
     .sort((a, b) => (b.l.data || '').localeCompare(a.l.data || ''))
+}
+
+/** Soma das entradas fixas (salário) vigentes no mês. */
+export function salarioFixo(model: Model, mes: string) {
+  return model.entradasFixas.filter((f) => vigente(f, mes)).reduce((a, f) => a + f.valor, 0)
+}
+
+/** Meta do destino em reais no mês (meses de salário viram valor); null = sem meta. */
+export function metaDoDestino(model: Model, destino: string, mes: string): number | null {
+  const m = model.metas[destino]
+  if (!m) return null
+  return m.meses ? m.meses * salarioFixo(model, mes) : m.valor
 }

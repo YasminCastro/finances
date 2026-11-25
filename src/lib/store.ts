@@ -395,6 +395,27 @@ export function useFinance() {
           ])
         }),
 
+      // ----- investimentos -----
+
+      /** Grava de uma vez os ajustes dos investimentos de um mês: altera, cria e exclui linhas. */
+      salvarInvestimentosMes: (mud: { alterar: { row: Row; patch: Record<string, Cell> }[]; novos: Record<string, Cell>[]; remover: Row[] }) =>
+        run(async (t, d) => {
+          if (mud.alterar.length) await updateRows(t, d, 'investimentos', mud.alterar)
+          if (mud.novos.length) await appendRows(t, d, 'investimentos', mud.novos.map((n, k) => ({ id: newId('I') + k, ...n })))
+          if (mud.remover.length) await deleteRows(t, d, 'investimentos', mud.remover)
+        }),
+
+      /** Grava a divisão dos investimentos (destino → %); destino fora do mapa fica sem %. */
+      salvarDivisao: (pcts: Record<string, number>) =>
+        run((t, d) =>
+          updateRows(
+            t,
+            d,
+            'destinos_investimento',
+            d.tables.destinos_investimento.filter((r) => str(r.nome)).map((r) => ({ row: r, patch: { percentual: pcts[str(r.nome)] ?? '' } })),
+          ),
+        ),
+
       // ----- carro -----
 
       /**

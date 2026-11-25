@@ -143,6 +143,7 @@ const AUTO_COLUMNS: Partial<Record<Tab, string[]>> = {
   lancamentos: ['fixo_id', 'carro'],
   formas_pagamento: ['dias_fechamento', 'limite'],
   categorias: ['cor'],
+  destinos_investimento: ['percentual', 'meta', 'meta_meses'],
   a_receber: ['origem', 'tipo', 'recebido_em', 'data'],
 }
 

@@ -198,12 +198,15 @@ export interface Entrada {
 
 export type EntradaFixa = VersaoFixa
 
+export type MetaDestino = { valor: number; meses?: undefined } | { meses: number; valor?: undefined }
+
 export interface Investimento {
   id: string
   mes_ref: string
   destino: string
   valor: number
   descricao: string
+  row: Row
 }
 
 export interface Receber {
@@ -290,6 +293,10 @@ export interface Model {
   /** sempre em ordem alfabética */
   categorias: Categoria[]
   destinos: string[]
+  /** como dividir cada aporte: destino → % (0–100); só os destinos com % preenchido */
+  divisao: Record<string, number>
+  /** meta de cada destino: valor fixo ou N meses de salário */
+  metas: Record<string, MetaDestino>
   pagamentos: Pagamento[]
   primeiroMes: string | null
   /** limites do mês por tipo, como fração do salário fixo (0.3 = 30%) */
@@ -359,6 +366,7 @@ export function buildModel(db: DB): Model {
       destino: str(r.destino) || 'Outros',
       valor: num(r.valor),
       descricao: str(r.descricao),
+      row: r,
     })),
     receber: t.a_receber.map((r) => ({
       id: str(r.id),
@@ -422,6 +430,18 @@ export function buildModel(db: DB): Model {
       .sort((a, b) => ordemAlfabetica(a.nome, b.nome))
       .map((c, i) => ({ ...c, cor: c.cor || corDaPosicao(i) })),
     destinos: t.destinos_investimento.map((r) => str(r.nome)).filter(Boolean),
+    metas: Object.fromEntries(
+      t.destinos_investimento.flatMap((r): [string, MetaDestino][] => {
+        const nome = str(r.nome)
+        if (!nome) return []
+        if (num(r.meta_meses) > 0) return [[nome, { meses: num(r.meta_meses) }]]
+        if (num(r.meta) > 0) return [[nome, { valor: num(r.meta) }]]
+        return []
+      }),
+    ),
+    divisao: Object.fromEntries(
+      t.destinos_investimento.filter((r) => str(r.nome) && str(r.percentual)).map((r) => [str(r.nome), num(str(r.percentual).replace('%', ''))]),
+    ),
     pagamentos: t.pagamentos.map((r) => ({
       id: str(r.id),
       mes_ref: normMes(r.mes_ref),

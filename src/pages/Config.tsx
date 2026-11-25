@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Bar, Button, Card, CardTitle, Empty, Field, cx, inputCls } from '../components/kit'
 import { MoneyInput } from '../components/MoneyInput'
-import { fmt, formaDe, limiteCartao } from '../lib/finance'
+import { fmt, formaDe, limiteCartao, metaDoDestino, salarioFixo } from '../lib/finance'
 import { SPREADSHEET_URL } from '../lib/google'
 import type { Row } from '../lib/google'
 import { corDaPosicao, ordemAlfabetica, PALETA_CATEGORIAS } from '../lib/cores'
@@ -129,6 +129,7 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
                 <li key={r._row} className="flex items-center gap-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">{str(r.nome)}</div>
+                    <div className="truncate text-xs text-muted">{textoMeta(model, str(r.nome))}</div>
                   </div>
                   <Acoes onEditar={() => setEdit({ tab: 'destinos_investimento', row: r })} emUso={n} onExcluir={() => finance.actions.excluirConfig('destinos_investimento', r)} busy={finance.busy} />
                 </li>
@@ -476,6 +477,9 @@ function ConfigModal({
     mes_seguinte: r ? isYes(r.fatura_vence_mes_seguinte) : model.formas.filter((x) => x.cartao).every((x) => x.mes_seguinte) && model.formas.some((x) => x.cartao),
     cor: str(r?.cor) || (edit.tab === 'categorias' ? corDaPosicao(model.categorias.length) : CORES[5]),
     orcamento: r && num(r.orcamento_mensal) ? fmt(num(r.orcamento_mensal)) : '',
+    tipo_meta: (r && num(r.meta_meses) > 0 ? 'meses' : r && num(r.meta) > 0 ? 'valor' : 'nenhuma') as 'nenhuma' | 'valor' | 'meses',
+    meta: r && num(r.meta) > 0 ? fmt(num(r.meta)) : '',
+    meta_meses: r && num(r.meta_meses) > 0 ? String(num(r.meta_meses)).replace('.', ',') : '',
   }))
   const [err, setErr] = useState<string | null>(null)
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }))
@@ -514,6 +518,15 @@ function ConfigModal({
         cor: f.cor,
       }
     if (edit.tab === 'categorias') valores = { nome, orcamento_mensal: f.orcamento ? num(f.orcamento) : '', cor: f.cor }
+    if (edit.tab === 'destinos_investimento') {
+      if (f.tipo_meta === 'valor' && !(num(f.meta) > 0)) return setErr('Informe o valor da meta.')
+      if (f.tipo_meta === 'meses' && !(num(f.meta_meses) > 0)) return setErr('Informe quantos meses de salário.')
+      valores = {
+        nome,
+        meta: f.tipo_meta === 'valor' ? num(f.meta) : '',
+        meta_meses: f.tipo_meta === 'meses' ? num(f.meta_meses) : '',
+      }
+    }
     if (await finance.actions.salvarConfig(edit.tab, r, valores)) onClose()
   }
 
@@ -617,6 +630,59 @@ function ConfigModal({
             </>
           )}
 
+          {edit.tab === 'destinos_investimento' && (
+            <div>
+              <span className="mb-1.5 block text-xs font-semibold text-muted">Meta</span>
+              <div className="grid grid-cols-3 gap-1 rounded-xl bg-soft p-1">
+                {(
+                  [
+                    ['nenhuma', 'Sem meta'],
+                    ['valor', 'Valor'],
+                    ['meses', 'Meses de salário'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    type="button"
+                    key={id}
+                    onClick={() => set('tipo_meta', id)}
+                    aria-pressed={f.tipo_meta === id}
+                    className={cx('rounded-lg px-2 py-1.5 text-xs font-semibold', f.tipo_meta === id ? 'bg-card text-ink shadow-sm' : 'text-muted')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {f.tipo_meta === 'valor' && (
+                <div className="mt-3">
+                  <MoneyInput value={f.meta} onChange={(v) => set('meta', v)} placeholder="60.000,00" />
+                </div>
+              )}
+              {f.tipo_meta === 'meses' && (
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    inputMode="decimal"
+                    className={cx(inputCls, 'w-24 text-right tabular-nums')}
+                    value={f.meta_meses}
+                    onChange={(e) => set('meta_meses', e.target.value.replace(/[^\d,.]/g, ''))}
+                    placeholder="6"
+                    aria-label="Meses de salário"
+                  />
+                  <span className="text-sm text-muted">
+                    meses × {fmt(salarioFixo(model, mesAtual()))} ={' '}
+                    <b className="text-ink tabular-nums">R$ {fmt(num(f.meta_meses) * salarioFixo(model, mesAtual()))}</b>
+                  </span>
+                </div>
+              )}
+              <p className="mt-2 text-xs text-muted">
+                {f.tipo_meta === 'meses'
+                  ? 'A meta acompanha o salário fixo: se ele mudar, a meta muda junto.'
+                  : f.tipo_meta === 'nenhuma'
+                    ? 'Bom para dinheiro guardado para compras, sem um valor final.'
+                    : 'Quanto você quer juntar nesse destino.'}
+              </p>
+            </div>
+          )}
+
           {afetados > 0 && (
             <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn">
               Renomear “{antigo}” para “{f.nome.trim()}” também atualiza {afetados} lançamentos que usam esse nome.
@@ -707,4 +773,11 @@ function MesFaturas({ model, finance }: { model: Model; finance: Finance }) {
       )}
     </section>
   )
+}
+
+function textoMeta(model: Model, destino: string) {
+  const m = model.metas[destino]
+  if (!m) return 'Sem meta'
+  const v = metaDoDestino(model, destino, mesAtual()) ?? 0
+  return m.meses ? `Meta: ${String(m.meses).replace('.', ',')} meses de salário (R$ ${fmt(v)})` : `Meta: R$ ${fmt(v)}`
 }
