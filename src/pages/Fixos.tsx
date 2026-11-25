@@ -219,7 +219,7 @@ function Linha({
               {f.forma_pagamento}
             </span>
           )}
-          {f.dia_vencimento ? <span>· vence dia {f.dia_vencimento}</span> : null}
+          {f.dia_vencimento ? <span>· cobra dia {f.dia_vencimento}</span> : null}
           {repete && (
             <span className="inline-flex items-center gap-1">
               · <Repeat size={11} /> {repete}
@@ -321,6 +321,8 @@ function FixoModal({ alvo, model, mes, finance, onClose }: { alvo: Alvo; model: 
       if (!f.descricao.trim()) return setErr('Preencha a descrição.')
       if (!num(f.valor)) return setErr('Informe um valor.')
     }
+    const dia = f.dia_vencimento ? Number(f.dia_vencimento) : 0
+    if (conta && modo !== 'encerrar' && f.dia_vencimento && (dia < 1 || dia > 31)) return setErr('O dia da cobrança deve ser entre 1 e 31.')
     const campos: Record<string, string | number> = { descricao: f.descricao.trim(), valor: num(f.valor) }
     if (conta)
       Object.assign(campos, {
@@ -440,8 +442,16 @@ function FixoModal({ alvo, model, mes, finance, onClose }: { alvo: Alvo; model: 
                         </Field>
                       </>
                     )}
-                    <Field label="Dia de vencimento">
-                      <input type="number" min={1} max={31} placeholder="opcional" className={inputCls} value={f.dia_vencimento} onChange={(e) => set('dia_vencimento')(e.target.value)} />
+                    <Field label="Dia da cobrança">
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        placeholder="opcional"
+                        className={inputCls}
+                        value={f.dia_vencimento}
+                        onChange={(e) => set('dia_vencimento')(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      />
                     </Field>
                   </div>
                 </>

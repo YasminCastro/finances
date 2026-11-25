@@ -1,6 +1,6 @@
 import { ordemAlfabetica } from './cores'
 import { corCategoria, vigente } from './model'
-import type { Entrada, Fixo, Forma, Lancamento, Model, Pagamento, Receber, VersaoFixa } from './model'
+import type { Entrada, Fixo, Forma, Lancamento, Model, Pagamento, Receber, Rodizio, VersaoFixa } from './model'
 
 // ---------- meses e formatação ----------
 
@@ -39,6 +39,13 @@ export function mesCurto(mes: string, comAno = true) {
 export function dataCurta(d: string) {
   const m = d.match(/^\d{4}-(\d{2})-(\d{2})/)
   return m ? `${m[2]}/${m[1]}` : d
+}
+
+/** Divide um total em N parcelas iguais (em centavos); a sobra dos centavos vai para a 1ª. */
+export function dividirParcelas(total: number, n: number): number[] {
+  const centavos = Math.round(total * 100)
+  const base = Math.floor(centavos / n)
+  return Array.from({ length: n }, (_, k) => (k === 0 ? centavos - base * (n - 1) : base) / 100)
 }
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -107,7 +114,22 @@ export function proximaOcorrencia(f: Fixo, mes: string, limite = 36): string | n
  * - contas com ajuste "só neste mês" (lançamento tipo fixo com fixo_id) → o ajuste substitui o modelo.
  */
 export function itensDoMes(model: Model, mes: string): { itens: Lancamento[]; fixosProjetados: boolean } {
-  const doMes = model.lancamentos.filter((l) => l.mes_ref === mes)
+  // conta fixa lançada sem data usa o dia da cobrança do modelo (pelo fixo_id ou, nos antigos, pelo nome)
+  const diaCobranca = (l: Lancamento) => {
+    const nome = l.descricao.trim().toLowerCase()
+    const doMesmo = l.fixo_id
+      ? model.fixos.filter((f) => f.serie === l.fixo_id)
+      : model.fixos.filter((f) => f.descricao.trim().toLowerCase() === nome)
+    const comDia = doMesmo.filter((f) => f.dia_vencimento)
+    return (comDia.find((f) => vigente(f, mes)) ?? comDia[comDia.length - 1])?.dia_vencimento ?? null
+  }
+  const doMes = model.lancamentos
+    .filter((l) => l.mes_ref === mes)
+    .map((l) => {
+      if (l.tipo !== 'fixo' || l.data) return l
+      const dia = diaCobranca(l)
+      return dia ? { ...l, data: venc(mes, dia)! } : l
+    })
   const legado = doMes.some((l) => l.tipo === 'fixo' && !l.fixo_id)
   if (legado || (model.primeiroMes && mes < model.primeiroMes)) return { itens: doMes, fixosProjetados: false }
   const ajustadas = new Set(doMes.filter((l) => l.tipo === 'fixo').map((l) => l.fixo_id))
@@ -118,7 +140,7 @@ export function itensDoMes(model: Model, mes: string): { itens: Lancamento[]; fi
     .map(({ f, oc }) => ({
       id: `fixo:${f.serie}`,
       mes_ref: mes,
-      data: '',
+      data: venc(mes, f.dia_vencimento) ?? '', // aparece nos lançamentos no dia da cobrança
       descricao: oc.de > 1 ? `${f.descricao} (${oc.parcela}/${oc.de})` : f.descricao,
       valor: oc.valor,
       categoria: f.categoria,
@@ -230,7 +252,10 @@ export function contasDoMes(model: Model, mes: string): Conta[] {
   const { itens } = itensDoMes(model, mes)
   const contas: Conta[] = []
   const porCartao = new Map<string, Lancamento[]>()
+  // gastos que outra pessoa pagou por você (abatidos do que ela te deve) não são contas a pagar
+  const abatidos = new Set(model.receber.filter((r) => r.valor < 0 && r.origem).map((r) => r.origem))
   for (const l of itens) {
+    if (abatidos.has(l.id)) continue
     const f = formaDe(model, l.forma_pagamento)
     if (f?.cartao) {
       const k = f.nome
@@ -353,8 +378,83 @@ export function parcelasPorMes(model: Model, mes: string, n = 12) {
 
 // ---------- a receber / investimentos ----------
 
+/** Meses de `de` até `ate` (negativo se `ate` vem antes). */
+export function difMeses(de: string, ate: string) {
+  const [y1, m1] = de.split('-').map(Number)
+  const [y2, m2] = ate.split('-').map(Number)
+  return (y2 - y1) * 12 + (m2 - m1)
+}
+
+/** De quem é a vez no rodízio em `mes` (null antes do início). */
+export function vezDoRodizio(r: Rodizio, mes: string): string | null {
+  const n = r.membros.length
+  const k = difMeses(r.mes_inicio, mes)
+  if (!n || !r.mes_inicio || k < 0) return null
+  return r.membros[k % n]
+}
+
+/** Valor do rodízio no mês: o da conta fixa ligada (se houver nesse mês) ou o valor cadastrado. */
+export function valorDoRodizio(model: Model, r: Rodizio, mes: string) {
+  if (r.fixo_id) {
+    const f = model.fixos.find((x) => x.serie === r.fixo_id && vigente(x, mes))
+    const oc = f && ocorrenciaFixo(f, mes)
+    if (oc) return oc.valor
+  }
+  return r.valor
+}
+
+/**
+ * Tudo que é para receber: as linhas da aba a_receber + a vez de cada pessoa nos rodízios
+ * (do início do rodízio até o mês atual) que ainda não virou linha.
+ */
+export function receberItens(model: Model): Receber[] {
+  const ate = hoje().slice(0, 7)
+  const feitos = new Set(model.receber.filter((r) => r.origem.startsWith('rodizio:')).map((r) => `${r.origem}|${r.mes_ref}`))
+  const projetados: Receber[] = []
+  for (const rod of model.rodizios) {
+    if (!rod.mes_inicio) continue
+    for (let m = rod.mes_inicio; m <= ate; m = addMeses(m, 1)) {
+      const pessoa = vezDoRodizio(rod, m)
+      const origem = `rodizio:${rod.id}`
+      if (!pessoa || pessoa.toLowerCase() === rod.eu.toLowerCase() || feitos.has(`${origem}|${m}`)) continue
+      projetados.push({
+        id: `${origem}:${m}`,
+        pessoa,
+        descricao: rod.nome,
+        mes_ref: m,
+        valor: valorDoRodizio(model, rod, m),
+        recebido: false,
+        origem,
+        tipo: 'fixo',
+        recebido_em: '',
+        data: '',
+        projetado: true,
+      })
+    }
+  }
+  return [...model.receber, ...projetados]
+}
+
+/** Quanto dos seus gastos do mês outras pessoas vão te devolver, por tipo (para os limites contarem só a sua parte). */
+export function reembolsoDoMes(model: Model, mes: string): { fixo: number; gasto: number; parcela: number; total: number } {
+  const out = { fixo: 0, gasto: 0, parcela: 0, total: 0 }
+  for (const r of receberItens(model)) {
+    if (r.mes_ref !== mes || !r.tipo || r.valor <= 0) continue
+    out[r.tipo] += r.valor
+    out.total += r.valor
+  }
+  return out
+}
+
+/** Cobranças ligadas a cada lançamento (id do lançamento → itens). */
+export function cobrancasPorLancamento(model: Model) {
+  const m = new Map<string, Receber[]>()
+  for (const r of model.receber) if (r.origem && !r.origem.startsWith('rodizio:')) m.set(r.origem, [...(m.get(r.origem) ?? []), r])
+  return m
+}
+
 export function receberPendente(model: Model) {
-  const pend = model.receber.filter((r) => !r.recebido)
+  const pend = receberItens(model).filter((r) => !r.recebido)
   const porPessoa = new Map<string, Receber[]>()
   for (const r of pend) porPessoa.set(r.pessoa, [...(porPessoa.get(r.pessoa) ?? []), r])
   return {

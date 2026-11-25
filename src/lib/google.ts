@@ -122,12 +122,16 @@ export const TABS = [
   'destinos_investimento',
   'pagamentos',
   'entradas_fixas',
+  'ajustes',
+  'rodizios',
 ] as const
 export type Tab = (typeof TABS)[number]
 
 /** Abas que o app cria sozinho se ainda não existirem na planilha. */
 const AUTO_CREATE: Partial<Record<Tab, string[]>> = {
   entradas_fixas: ['id', 'descricao', 'valor', 'ativo', 'mes_inicio', 'mes_fim', 'serie'],
+  ajustes: ['chave', 'valor'],
+  rodizios: ['id', 'nome', 'membros', 'eu', 'mes_inicio', 'valor', 'fixo_id'],
 }
 
 /** Colunas que o app acrescenta no fim do cabeçalho se ainda não existirem. */
@@ -137,6 +141,7 @@ const AUTO_COLUMNS: Partial<Record<Tab, string[]>> = {
   lancamentos: ['fixo_id'],
   formas_pagamento: ['dias_fechamento', 'limite'],
   categorias: ['cor'],
+  a_receber: ['origem', 'tipo', 'recebido_em', 'data'],
 }
 
 export type Cell = string | number
@@ -299,10 +304,11 @@ export async function appendRows(token: string, db: DB, tab: Tab, rows: Record<s
  */
 async function assertIds(token: string, db: DB, tab: Tab, rows: Row[]) {
   const chave = db.headers[tab][0]
-  const ranges = rows.map((r) => 'ranges=' + encodeURIComponent(`${tab}!A${r._row}`)).join('&')
-  const res = await api<{ valueRanges: { values?: Cell[][] }[] }>(token, `/values:batchGet?${ranges}`)
-  rows.forEach((r, i) => {
-    const got = String(res.valueRanges[i]?.values?.[0]?.[0] ?? '')
+  // lê a 1ª coluna inteira de uma vez (funciona para qualquer quantidade de linhas)
+  const res = await api<{ values?: Cell[][] }>(token, `/values/${encodeURIComponent(`${tab}!A:A`)}`)
+  const col = res.values ?? []
+  rows.forEach((r) => {
+    const got = String(col[r._row - 1]?.[0] ?? '')
     if (got !== String(r[chave])) throw new Error('A planilha mudou desde que foi carregada. Atualize e tente de novo.')
   })
 }
@@ -350,6 +356,23 @@ export async function updateRow(token: string, db: DB, tab: Tab, row: Row, patch
   await api(token, `/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
     method: 'PUT',
     body: JSON.stringify({ values: [h.map((k) => merged[k] ?? '')] }),
+  })
+}
+
+/** Atualiza várias linhas de uma vez (uma conferência + uma escrita). */
+export async function updateRows(token: string, db: DB, tab: Tab, itens: { row: Row; patch: Record<string, Cell> }[]) {
+  if (!itens.length) return
+  await assertIds(token, db, tab, itens.map((i) => i.row))
+  const h = db.headers[tab]
+  await api(token, '/values:batchUpdate', {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: 'RAW',
+      data: itens.map(({ row, patch }) => {
+        const merged: Record<string, Cell> = { ...row, ...patch }
+        return { range: `${tab}!A${row._row}:${colLetter(h.length)}${row._row}`, values: [h.map((k) => merged[k] ?? '')] }
+      }),
+    }),
   })
 }
 

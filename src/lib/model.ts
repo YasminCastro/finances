@@ -58,6 +58,78 @@ export interface Lancamento {
   /** fixo calculado a partir do modelo (ainda não lançado na planilha) */
   projetado?: boolean
   fixo?: Fixo
+  /** parcela futura deduzida de parcelas_restantes (a linha ainda não existe na planilha) */
+  estimada?: boolean
+}
+
+/** Identifica a compra parcelada (o id do parcelamento ou, sem ele, descrição + forma). */
+export function chaveParcela(l: Lancamento) {
+  return l.parcelamento_id || `${l.descricao.trim().toLowerCase()}|${l.forma_pagamento}`
+}
+
+const mesSeguinte = (mes: string, n = 1) => {
+  const [y, m] = mes.split('-').map(Number)
+  const d = new Date(y, m - 1 + n, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Soma meses a uma data AAAA-MM-DD mantendo o dia (limitado ao fim do mês: 31/01 + 1 → 28/02). */
+export function somarMesesData(data: string, n: number) {
+  const [y, m, d] = data.split('-').map(Number)
+  const alvo = new Date(y, m - 1 + n, 1)
+  const ultimo = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
+  return `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}-${String(Math.min(d, ultimo)).padStart(2, '0')}`
+}
+
+/**
+ * Datas das parcelas: a 1ª fica no dia da compra; da 2ª em diante aparecem no dia 1 do mês da fatura.
+ * Só para exibição; a planilha não muda.
+ */
+function datarParcelas(lancamentos: Lancamento[]) {
+  const base = new Map<string, Lancamento>()
+  for (const l of lancamentos) {
+    if (l.tipo !== 'parcela' || !/^\d{4}-\d{2}-\d{2}$/.test(l.data)) continue
+    const k = chaveParcela(l)
+    const b = base.get(k)
+    if (!b || l.mes_ref < b.mes_ref) base.set(k, l)
+  }
+  return lancamentos.map((l) => {
+    if (l.tipo !== 'parcela' || !/^\d{4}-\d{2}$/.test(l.mes_ref)) return l
+    const b = base.get(chaveParcela(l))
+    if (!b || l.mes_ref <= b.mes_ref) return l // a 1ª parcela fica no dia da compra
+    // da 2ª em diante: dia 1 do mês da fatura. Datas próprias (ex.: adiantamento) são mantidas;
+    // só troca a data vazia ou a que era só a da compra repetida mês a mês.
+    const [y1, m1] = b.mes_ref.split('-').map(Number)
+    const [y2, m2] = l.mes_ref.split('-').map(Number)
+    if (l.data && l.data !== somarMesesData(b.data, (y2 - y1) * 12 + (m2 - m1))) return l
+    return { ...l, data: `${l.mes_ref}-01` }
+  })
+}
+
+/**
+ * Parcelas que faltam na planilha: se a última parcela registrada diz "faltam N",
+ * os meses seguintes aparecem como estimados (só do mês atual em diante, o histórico não muda).
+ */
+function parcelasEstimadas(lancamentos: Lancamento[]): Lancamento[] {
+  const ultima = new Map<string, Lancamento>()
+  for (const l of lancamentos) {
+    if (l.tipo !== 'parcela' || !/^\d{4}-\d{2}$/.test(l.mes_ref)) continue
+    const k = chaveParcela(l)
+    const u = ultima.get(k)
+    if (!u || l.mes_ref > u.mes_ref) ultima.set(k, l)
+  }
+  const hojeD = new Date()
+  const atual = `${hojeD.getFullYear()}-${String(hojeD.getMonth() + 1).padStart(2, '0')}`
+  const extras: Lancamento[] = []
+  for (const [k, u] of ultima) {
+    const rest = u.parcelas_restantes ?? 0
+    for (let n = 1; n < rest; n++) {
+      const mes = mesSeguinte(u.mes_ref, n)
+      if (mes < atual) continue
+      extras.push({ ...u, id: `est:${k}:${mes}`, mes_ref: mes, data: '', parcelas_restantes: rest - n, row: undefined, estimada: true })
+    }
+  }
+  return extras
 }
 
 /** Campos comuns às versões de contas fixas e entradas fixas. */
@@ -139,6 +211,31 @@ export interface Receber {
   mes_ref: string
   valor: number
   recebido: boolean
+  /** de onde veio: id do lançamento que você pagou por alguém, ou `rodizio:<id>` */
+  origem: string
+  /** parte dos seus gastos que esse reembolso abate: fixo, gasto ou parcela ('' = avulso) */
+  tipo: '' | 'fixo' | 'gasto' | 'parcela'
+  recebido_em: string
+  /** AAAA-MM-DD (ex.: dia em que a pessoa pagou algo para você, no abatimento) */
+  data: string
+  /** sem linha na planilha (ex.: vez de alguém no rodízio ainda não confirmada) */
+  projetado?: boolean
+  row?: Row
+}
+
+/** Assinatura dividida em rodízio: cai no seu cartão e cada mês uma pessoa te reembolsa. */
+export interface Rodizio {
+  id: string
+  nome: string
+  /** na ordem do rodízio */
+  membros: string[]
+  /** qual dos membros é você (no seu mês não há reembolso) */
+  eu: string
+  /** mês da vez do 1º membro */
+  mes_inicio: string
+  valor: number
+  /** conta fixa ligada: o valor acompanha a conta */
+  fixo_id: string
   row: Row
 }
 
@@ -170,12 +267,30 @@ export interface Model {
   entradasFixas: EntradaFixa[]
   investimentos: Investimento[]
   receber: Receber[]
+  rodizios: Rodizio[]
   formas: Forma[]
   /** sempre em ordem alfabética */
   categorias: Categoria[]
   destinos: string[]
   pagamentos: Pagamento[]
   primeiroMes: string | null
+  /** limites do mês por tipo, como fração do salário fixo (0.3 = 30%) */
+  limites: Record<TipoLimite, number>
+}
+
+/** fixo/gasto/parcela são tetos; investimento é meta (quanto guardar). */
+export type TipoLimite = 'fixo' | 'gasto' | 'parcela' | 'investimento'
+
+/** Limites por tipo em % do salário fixo (aba "ajustes": chave → valor). Base: regra 50/30/20. */
+export const LIMITES: Record<TipoLimite, { chave: string; padrao: number; label: string }> = {
+  fixo: { chave: 'limite_fixos_pct', padrao: 50, label: 'Fixos' },
+  gasto: { chave: 'limite_gastos_pct', padrao: 20, label: 'Gastos' },
+  parcela: { chave: 'limite_parcelas_pct', padrao: 30, label: 'Parcelas' },
+  investimento: { chave: 'meta_investimento_pct', padrao: 10, label: 'Investimento (meta)' },
+}
+
+function ajuste(db: DB, chave: string): string {
+  return str(db.tables.ajustes?.find((r) => str(r.chave) === chave)?.valor)
 }
 
 export function buildModel(db: DB): Model {
@@ -201,7 +316,7 @@ export function buildModel(db: DB): Model {
   const meses = lancamentos.map((l) => l.mes_ref).filter((m) => /^\d{4}-\d{2}$/.test(m))
   return {
     db,
-    lancamentos,
+    lancamentos: datarParcelas([...lancamentos, ...parcelasEstimadas(lancamentos)]),
     fixos: t.fixos
       .filter((r) => str(r.descricao))
       .map((r) => ({
@@ -233,8 +348,27 @@ export function buildModel(db: DB): Model {
       mes_ref: normMes(r.mes_ref),
       valor: num(r.valor),
       recebido: isYes(r.recebido),
+      origem: str(r.origem),
+      tipo: (['fixo', 'gasto', 'parcela'].includes(str(r.tipo)) ? str(r.tipo) : '') as Receber['tipo'],
+      recebido_em: normData(r.recebido_em),
+      data: normData(r.data),
       row: r,
     })),
+    rodizios: (t.rodizios ?? [])
+      .filter((r) => str(r.nome))
+      .map((r) => ({
+        id: str(r.id),
+        nome: str(r.nome),
+        membros: str(r.membros)
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean),
+        eu: str(r.eu),
+        mes_inicio: normMes(r.mes_inicio),
+        valor: num(r.valor),
+        fixo_id: str(r.fixo_id),
+        row: r,
+      })),
     formas: t.formas_pagamento
       .filter((r) => str(r.nome))
       .map((r) => ({
@@ -262,5 +396,11 @@ export function buildModel(db: DB): Model {
       row: r,
     })),
     primeiroMes: meses.length ? meses.reduce((a, b) => (a < b ? a : b)) : null,
+    limites: Object.fromEntries(
+      Object.entries(LIMITES).map(([k, l]) => {
+        const v = num(ajuste(db, l.chave))
+        return [k, (v > 0 && v <= 100 ? v : l.padrao) / 100]
+      }),
+    ) as Record<TipoLimite, number>,
   }
 }

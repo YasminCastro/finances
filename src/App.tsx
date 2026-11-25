@@ -1,19 +1,4 @@
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  LayoutDashboard,
-  List,
-  LoaderCircle,
-  LogOut,
-  Moon,
-  Plus,
-  RefreshCw,
-  Repeat,
-  Settings,
-  Sun,
-  X,
-} from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
@@ -26,13 +11,17 @@ import { MonthPicker } from './components/pickers'
 import { Config } from './pages/Config'
 import { Fixos } from './pages/Fixos'
 import { Lancamentos } from './pages/Lancamentos'
+import { Parcelamentos } from './pages/Parcelamentos'
 import { Overview } from './pages/Overview'
+import { Receber } from './pages/Receber'
 
-type Page = 'overview' | 'lancamentos' | 'fixos' | 'config'
+type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'config'
 const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Visão geral', icon: <LayoutDashboard size={18} /> },
   { id: 'lancamentos', label: 'Lançamentos', icon: <List size={18} /> },
   { id: 'fixos', label: 'Fixos', icon: <Repeat size={18} /> },
+  { id: 'parcelamentos', label: 'Parcelas', icon: <Layers size={18} /> },
+  { id: 'receber', label: 'A receber', icon: <HandCoins size={18} /> },
 ]
 const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
 
@@ -144,6 +133,10 @@ export default function App() {
           <Overview model={model} mes={mes} finance={finance} />
         ) : page === 'fixos' ? (
           <Fixos model={model} mes={mes} finance={finance} />
+        ) : page === 'parcelamentos' ? (
+          <Parcelamentos model={model} mes={mes} />
+        ) : page === 'receber' ? (
+          <Receber model={model} mes={mes} finance={finance} />
         ) : page === 'config' ? (
           <Config model={model} finance={finance} dark={dark} setDark={setDark} />
         ) : (

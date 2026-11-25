@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { addMeses, hoje } from './finance'
+import { addMeses, dividirParcelas, hoje } from './finance'
 import type { Conta } from './finance'
 import {
   AuthError,
@@ -13,9 +13,10 @@ import {
   signOut,
   renomearReferencias,
   updateRow,
+  updateRows,
 } from './google'
 import type { Cell, DB, Row, Tab } from './google'
-import { buildModel } from './model'
+import { buildModel, normMes, str, vigente } from './model'
 import type { Fixo, Lancamento, Model, Receber, VersaoFixa } from './model'
 
 export type TabFixa = 'fixos' | 'entradas_fixas'
@@ -23,11 +24,39 @@ export type TabConfig = 'formas_pagamento' | 'categorias' | 'destinos_investimen
 
 export interface NovoParcelado {
   descricao: string
-  valor_parcela: number
+  /** valor total da compra; é dividido entre as parcelas */
+  valor_total: number
   total_parcelas: number
   mes_primeira_parcela: string
   categoria: string
   forma_pagamento: string
+  /** AAAA-MM-DD; fica na 1ª parcela */
+  data_compra?: string
+  /** parte da compra que é de outra pessoa (vira cobrança em cada parcela) */
+  cobranca?: Cobranca
+}
+
+/** Compra que você pagou (toda ou em parte) por outra pessoa. */
+export interface Cobranca {
+  pessoa: string
+  /** quanto a pessoa te deve no total */
+  valor: number
+}
+
+/** Linhas de a_receber para uma cobrança ligada a lançamentos (dividida como as parcelas). */
+function linhasCobranca(c: Cobranca | undefined, lancs: { id: string; mes_ref: string; descricao: Cell; tipo: string }[]) {
+  if (!c || !c.pessoa.trim() || !(c.valor > 0) || !lancs.length) return []
+  const partes = dividirParcelas(c.valor, lancs.length)
+  return lancs.map((l, k) => ({
+    id: newId('R') + k,
+    pessoa: c.pessoa.trim(),
+    descricao: str(l.descricao) + (lancs.length > 1 ? ` (${k + 1}/${lancs.length})` : ''),
+    mes_ref: l.mes_ref,
+    valor: partes[k],
+    recebido: 'não',
+    origem: l.id,
+    tipo: l.tipo,
+  }))
 }
 
 export function useFinance() {
@@ -127,13 +156,14 @@ export function useFinance() {
       addParcelado: (p: NovoParcelado) =>
         run(async (t, d) => {
           const pid = newId('P')
-          await appendRows(t, d, 'parcelamentos', [{ id: pid, ...p, observacao: '' }])
-          const linhas = Array.from({ length: p.total_parcelas }, (_, k) => ({
+          const valores = dividirParcelas(p.valor_total, p.total_parcelas)
+          await appendRows(t, d, 'parcelamentos', [{ id: pid, ...p, valor_parcela: valores[valores.length - 1], observacao: '' }])
+          const linhas = valores.map((valor, k) => ({
             id: newId('L') + k,
             mes_ref: addMeses(p.mes_primeira_parcela, k),
-            data: k === 0 ? hoje() : '',
+            data: k === 0 ? p.data_compra || hoje() : `${addMeses(p.mes_primeira_parcela, k)}-01`, // 1ª: dia da compra; demais: início do mês
             descricao: p.descricao,
-            valor: p.valor_parcela,
+            valor,
             categoria: p.categoria,
             forma_pagamento: p.forma_pagamento,
             tipo: 'parcela',
@@ -141,6 +171,25 @@ export function useFinance() {
             parcelamento_id: pid,
           }))
           await appendRows(t, d, 'lancamentos', linhas)
+          await appendRows(t, d, 'a_receber', linhasCobranca(p.cobranca, linhas))
+        }),
+
+      /** Novo gasto; com `cobranca`, a parte da outra pessoa vira um item a receber ligado a ele. */
+      addGasto: (campos: Record<string, Cell>, cobranca?: Cobranca) =>
+        run(async (t, d) => {
+          const l = { id: newId('L'), ...campos, tipo: 'gasto' }
+          await appendRows(t, d, 'lancamentos', [l])
+          await appendRows(t, d, 'a_receber', linhasCobranca(cobranca, [{ id: l.id, mes_ref: str(campos.mes_ref), descricao: campos.descricao, tipo: 'gasto' }]))
+        }),
+
+      /** Cobra de alguém um lançamento que já existe (ex.: a parte de outra pessoa numa compra). */
+      cobrarLancamentos: (ls: Lancamento[], cobranca: Cobranca) =>
+        run(async (t, d) => {
+          // parcelas estimadas ainda não têm linha: cria antes para a cobrança ficar ligada a elas
+          const ids = new Map(ls.filter((l) => !l.row).map((l, k) => [l, newId('L') + k]))
+          if (ids.size) await salvarLancamentos(t, d, [...ids].map(([l, id]) => ({ l, campos: { id } })))
+          const comId = ls.map((l) => ({ id: ids.get(l) ?? l.id, mes_ref: l.mes_ref, descricao: l.descricao, tipo: l.tipo }))
+          await appendRows(t, d, 'a_receber', linhasCobranca(cobranca, comId))
         }),
 
       // ----- configurações (formas de pagamento, categorias, destinos) -----
@@ -156,6 +205,13 @@ export function useFinance() {
         }),
 
       excluirConfig: (tab: TabConfig, row: Row) => run((t, d) => deleteRows(t, d, tab, [row])),
+
+      /** Grava um ajuste geral (aba "ajustes"). */
+      salvarAjuste: (chave: string, valor: Cell) =>
+        run((t, d) => {
+          const row = d.tables.ajustes.find((r) => str(r.chave) === chave)
+          return row ? updateRow(t, d, 'ajustes', row, { valor }) : appendRows(t, d, 'ajustes', [{ chave, valor }])
+        }),
 
       // ----- contas fixas / entradas fixas (versões com período de validade) -----
 
@@ -219,15 +275,82 @@ export function useFinance() {
           ),
         ),
 
-      excluirLancamentos: (ls: Lancamento[]) =>
-        run((t, d) =>
-          deleteRows(
+      /**
+       * Salva lançamentos (cada um com seus próprios campos): os que já estão na planilha são atualizados;
+       * parcelas estimadas (sem linha) são criadas.
+       */
+      editarLancamentos: (itens: ItemSalvar[]) => run((t, d) => salvarLancamentos(t, d, itens)),
+
+      /** Exclui lançamentos; `antes` grava outros ajustes na mesma operação (ex.: parcelas restantes). */
+      excluirLancamentos: (ls: Lancamento[], antes: ItemSalvar[] = []) =>
+        run(async (t, d) => {
+          await salvarLancamentos(t, d, antes)
+          await deleteRows(
             t,
             d,
             'lancamentos',
             ls.filter((l) => l.row).map((l) => l.row!),
-          ),
-        ),
+          )
+          // cobranças ainda não recebidas desses lançamentos deixam de existir junto
+          const ids = new Set(ls.map((l) => l.id))
+          const cobr = d.tables.a_receber.filter((r) => ids.has(str(r.origem)) && !/^s/i.test(str(r.recebido)))
+          if (cobr.length) await deleteRows(t, d, 'a_receber', cobr)
+        }),
+
+      /**
+       * Troca em qual mês as faturas dos cartões aparecem e move os dados já lançados junto:
+       * paraVencimento = true → a fatura que vence em dezembro passa a aparecer em Dezembro (tudo anda +1 mês).
+       */
+      mudarMesFatura: (cartoes: string[], paraVencimento: boolean) =>
+        run(async (t, d) => {
+          if (!model) return
+          const delta = paraVencimento ? 1 : -1
+          const nomes = new Set(cartoes.map((c) => c.trim().toLowerCase()))
+          const doCartao = (forma: Cell | undefined) => nomes.has(str(forma).toLowerCase())
+          const mover = (m: Cell | undefined) => (str(m) ? addMeses(normMes(m), delta) : '')
+
+          // meses com fixos "à moda antiga" (sem fixo_id): ao avançar, o último deles cairia num mês que hoje
+          // usa o modelo de fixos; esses viram ajustes do mês (com fixo_id) para o modelo continuar valendo ali.
+          const legadoAntes = new Set(model.lancamentos.filter((l) => l.row && l.tipo === 'fixo' && !l.fixo_id).map((l) => l.mes_ref))
+
+          const lanc = model.lancamentos
+            .filter((l) => l.row && doCartao(l.forma_pagamento))
+            .map((l) => {
+              const mes = addMeses(l.mes_ref, delta)
+              const patch: Record<string, Cell> = { mes_ref: mes }
+              if (l.tipo === 'fixo' && !l.fixo_id && !legadoAntes.has(mes)) {
+                const f = model.fixos.find(
+                  (x) => vigente(x, mes) && x.descricao.toLowerCase() === l.descricao.toLowerCase() && x.forma_pagamento.toLowerCase() === l.forma_pagamento.toLowerCase(),
+                )
+                patch.fixo_id = f?.serie ?? 'legado'
+              }
+              return { row: l.row!, patch }
+            })
+          await updateRows(t, d, 'lancamentos', lanc)
+
+          const fixos = d.tables.fixos
+            .filter((r) => doCartao(r.forma_pagamento) && (str(r.mes_inicio) || str(r.mes_fim)))
+            .map((r) => ({ row: r, patch: { mes_inicio: mover(r.mes_inicio), mes_fim: mover(r.mes_fim) } }))
+          await updateRows(t, d, 'fixos', fixos)
+
+          const parc = d.tables.parcelamentos
+            .filter((r) => doCartao(r.forma_pagamento) && str(r.mes_primeira_parcela))
+            .map((r) => ({ row: r, patch: { mes_primeira_parcela: mover(r.mes_primeira_parcela) } }))
+          await updateRows(t, d, 'parcelamentos', parc)
+
+          const pags = d.tables.pagamentos
+            .filter((r) => {
+              const ref = str(r.referencia)
+              return ref.startsWith('fatura:') && nomes.has(ref.slice(7).toLowerCase())
+            })
+            .map((r) => ({ row: r, patch: { mes_ref: mover(r.mes_ref) } }))
+          await updateRows(t, d, 'pagamentos', pags)
+
+          const formas = d.tables.formas_pagamento
+            .filter((r) => nomes.has(str(r.nome).toLowerCase()))
+            .map((r) => ({ row: r, patch: { fatura_vence_mes_seguinte: paraVencimento ? 'não' : 'sim' } }))
+          await updateRows(t, d, 'formas_pagamento', formas)
+        }),
 
       togglePago: (mes: string, c: Conta) =>
         run((t, d) =>
@@ -236,12 +359,158 @@ export function useFinance() {
             : appendRows(t, d, 'pagamentos', [{ id: newId('G'), mes_ref: mes, referencia: c.ref, valor: c.valor, pago_em: hoje() }]),
         ),
 
-      toggleRecebido: (r: Receber) => run((t, d) => updateRow(t, d, 'a_receber', r.row, { recebido: r.recebido ? 'não' : 'sim' })),
+      toggleRecebido: (r: Receber) => run((t, d) => marcar(t, d, [r], !r.recebido)),
+
+      /** Marca vários itens como recebidos (ou não). Vezes do rodízio ainda sem linha são gravadas. */
+      marcarRecebidos: (itens: Receber[], recebido = true) => run((t, d) => marcar(t, d, itens, recebido)),
+
+      editarReceber: (r: Receber, campos: Record<string, Cell>) =>
+        run((t, d) =>
+          r.row ? updateRow(t, d, 'a_receber', r.row, campos) : appendRows(t, d, 'a_receber', [{ ...linhaReceber(r), ...campos }]),
+        ),
+
+      /**
+       * Abatimento: a pessoa pagou algo para você e isso desconta do que ela te deve.
+       * Com `lancar`, vira também um gasto seu (pago por ela: não entra em fatura nem em contas a pagar).
+       */
+      abater: (a: { pessoa: string; descricao: string; valor: number; data: string; lancar?: { categoria: string } }) =>
+        run(async (t, d) => {
+          const mes = a.data.slice(0, 7)
+          const lid = a.lancar ? newId('L') : ''
+          if (a.lancar)
+            await appendRows(t, d, 'lancamentos', [
+              {
+                id: lid,
+                mes_ref: mes,
+                data: a.data,
+                descricao: a.descricao,
+                valor: a.valor,
+                categoria: a.lancar.categoria,
+                forma_pagamento: `Pago por ${a.pessoa}`,
+                tipo: 'gasto',
+              },
+            ])
+          await appendRows(t, d, 'a_receber', [
+            { id: newId('R'), pessoa: a.pessoa, descricao: a.descricao, mes_ref: mes, data: a.data, valor: -a.valor, recebido: 'não', origem: lid, tipo: '' },
+          ])
+        }),
+
+      /** Renomeia uma pessoa em todas as cobranças (pendentes e recebidas) e nos rodízios. */
+      renomearPessoa: (antigo: string, novo: string) =>
+        run(async (t, d) => {
+          const igual = (x: Cell | undefined) => str(x).toLowerCase() === antigo.trim().toLowerCase()
+          await updateRows(
+            t,
+            d,
+            'a_receber',
+            d.tables.a_receber.filter((r) => igual(r.pessoa)).map((r) => ({ row: r, patch: { pessoa: novo } })),
+          )
+          await updateRows(
+            t,
+            d,
+            'rodizios',
+            d.tables.rodizios
+              .filter((r) => igual(r.eu) || str(r.membros).split(',').some(igual))
+              .map((r) => ({
+                row: r,
+                patch: {
+                  membros: str(r.membros)
+                    .split(',')
+                    .map((m) => (igual(m) ? novo : m.trim()))
+                    .filter(Boolean)
+                    .join(', '),
+                  eu: igual(r.eu) ? novo : str(r.eu),
+                },
+              })),
+          )
+        }),
+
+      excluirReceber: (itens: Receber[]) =>
+        run((t, d) =>
+          deleteRows(
+            t,
+            d,
+            'a_receber',
+            itens.filter((r) => r.row).map((r) => r.row!),
+          ),
+        ),
+
+      // ----- rodízios (ex.: Spotify) -----
+      salvarRodizio: (row: Row | undefined, valores: Record<string, Cell>) =>
+        run((t, d) => (row ? updateRow(t, d, 'rodizios', row, valores) : appendRows(t, d, 'rodizios', [{ id: newId('RZ'), ...valores }]))),
+
+      excluirRodizio: (row: Row) => run((t, d) => deleteRows(t, d, 'rodizios', [row])),
     }),
-    [run],
+    [run, model],
   )
 
   return { token, model, loading, busy, error, setError, login, logout, reload, actions }
 }
 
 export type Finance = ReturnType<typeof useFinance>
+
+export type ItemSalvar = { l: Lancamento; campos: Record<string, Cell> }
+
+function linhaReceber(r: Receber): Record<string, Cell> {
+  return {
+    id: r.projetado ? newId('R') : r.id,
+    pessoa: r.pessoa,
+    descricao: r.descricao,
+    mes_ref: r.mes_ref,
+    valor: r.valor,
+    recebido: r.recebido ? 'sim' : 'não',
+    origem: r.origem,
+    tipo: r.tipo,
+    recebido_em: r.recebido_em,
+    data: r.data,
+  }
+}
+
+async function marcar(t: string, d: DB, itens: Receber[], recebido: boolean) {
+  const patch = { recebido: recebido ? 'sim' : 'não', recebido_em: recebido ? hoje() : '' }
+  const comLinha = itens.filter((r) => r.row && r.recebido !== recebido)
+  await updateRows(
+    t,
+    d,
+    'a_receber',
+    comLinha.map((r) => ({ row: r.row!, patch })),
+  )
+  const novos = itens.filter((r) => !r.row && recebido)
+  await appendRows(
+    t,
+    d,
+    'a_receber',
+    novos.map((r, k) => ({ ...linhaReceber(r), id: newId('R') + k, ...patch })),
+  )
+}
+
+/** Atualiza os lançamentos que já têm linha e cria as parcelas estimadas (sem linha). */
+async function salvarLancamentos(t: string, d: DB, itens: ItemSalvar[]) {
+  await updateRows(
+    t,
+    d,
+    'lancamentos',
+    itens.filter((i) => i.l.row).map((i) => ({ row: i.l.row!, patch: i.campos })),
+  )
+  await appendRows(
+    t,
+    d,
+    'lancamentos',
+    itens
+      .filter((i) => !i.l.row)
+      .map(({ l, campos }, k) => ({
+        id: newId('L') + k,
+        mes_ref: l.mes_ref,
+        data: l.data,
+        descricao: l.descricao,
+        valor: l.valor,
+        categoria: l.categoria,
+        forma_pagamento: l.forma_pagamento,
+        tipo: l.tipo,
+        parcelas_restantes: l.parcelas_restantes ?? '',
+        parcelamento_id: l.parcelamento_id,
+        fixo_id: l.fixo_id,
+        ...campos,
+      })),
+  )
+}

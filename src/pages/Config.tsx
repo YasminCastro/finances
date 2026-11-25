@@ -1,5 +1,5 @@
 import { escFecha } from '@/lib/utils'
-import { Barcode, CreditCard, ExternalLink, Moon, Pencil, PiggyBank, Plus, QrCode, Sun, Tags, Trash2, X } from 'lucide-react'
+import { Barcode, CreditCard, Percent, ExternalLink, Moon, Pencil, PiggyBank, Plus, QrCode, Sun, Tags, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Bar, Button, Card, CardTitle, Empty, Field, cx, inputCls } from '../components/kit'
@@ -8,8 +8,8 @@ import { fmt, formaDe, limiteCartao } from '../lib/finance'
 import { SPREADSHEET_URL } from '../lib/google'
 import type { Row } from '../lib/google'
 import { corDaPosicao, ordemAlfabetica, PALETA_CATEGORIAS } from '../lib/cores'
-import { corCategoria, isYes, num, str } from '../lib/model'
-import type { Model } from '../lib/model'
+import { LIMITES, corCategoria, isYes, num, str, vigente } from '../lib/model'
+import type { Model, TipoLimite } from '../lib/model'
 import type { Finance, TabConfig } from '../lib/store'
 
 const CORES = ['#EC7000', '#820AD1', '#FF7A00', '#21C25E', '#D7262E', '#2563EB', '#0F172A', '#64748B']
@@ -33,6 +33,8 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
           <Empty>Nenhuma forma de pagamento.</Empty>
         ) : (
           <div className="space-y-6">
+            <MesFaturas model={model} finance={finance} />
+
             <section>
               <h3 className="mb-3 text-xs font-semibold tracking-wider text-muted uppercase">Cartões de crédito</h3>
               <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -148,6 +150,7 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
               <span className={cx('absolute top-0.5 size-5 rounded-full bg-white shadow transition-all', dark ? 'left-5.5' : 'left-0.5')} />
             </button>
           </div>
+          <Limites model={model} finance={finance} />
           <a href={SPREADSHEET_URL} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
             <ExternalLink size={16} /> Abrir planilha de dados
           </a>
@@ -157,6 +160,85 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
       {edit && <ConfigModal key={edit.tab + (edit.row?._row ?? 'novo')} edit={edit} model={model} finance={finance} uso={uso} onClose={() => setEdit(null)} />}
     </div>
   )
+}
+
+/** Limites do mês por tipo em % do salário fixo (alerta nos cards dos lançamentos). */
+function Limites({ model, finance }: { model: Model; finance: Finance }) {
+  const salario = model.entradasFixas.filter((f) => vigente(f, mesAtual())).reduce((a, f) => a + f.valor, 0)
+  const soma = Math.round(Object.values(model.limites).reduce((a, v) => a + v, 0) * 100)
+  const livre = 100 - soma
+  return (
+    <div className="border-t border-line py-3 text-sm first:border-t-0">
+      <div className="flex items-center gap-2">
+        <Percent size={16} /> Limites do mês
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Em % do salário fixo. Acima do limite, o card do tipo nos lançamentos fica vermelho (amarelo quando está perto). O investimento é
+        a meta de quanto guardar por mês (por enquanto só fica registrada).
+      </p>
+      <div className="mt-3 space-y-2">
+        {(Object.keys(LIMITES) as TipoLimite[]).map((k) => (
+          <LimiteCampo key={k} k={k} model={model} finance={finance} salario={salario} />
+        ))}
+      </div>
+      <div className={cx('mt-3 rounded-xl px-3 py-2 text-xs', livre < 0 ? 'bg-bad-soft text-bad' : livre === 0 ? 'bg-good-soft text-good' : 'bg-soft text-muted')}>
+        Total planejado: <b className="tabular-nums">{soma}%</b> do salário
+        {livre < 0 ? ` · passa ${-livre}% do salário, reduza algum limite.` : livre === 0 ? ' · todo o salário tem destino.' : ` · ${livre}% sem destino.`}
+      </div>
+    </div>
+  )
+}
+
+function LimiteCampo({ k, model, finance, salario }: { k: TipoLimite; model: Model; finance: Finance; salario: number }) {
+  const l = LIMITES[k]
+  const atual = Math.round(model.limites[k] * 100)
+  const [v, setV] = useState(String(atual))
+  useEffect(() => setV(String(atual)), [atual])
+  const n = Number(v.replace(',', '.'))
+  const valido = Number.isFinite(n) && n > 0 && n <= 100
+  const mudou = valido && n !== atual
+  const id = `limite-${k}`
+
+  // grava ao sair do campo (Enter também sai); um único caminho evita gravar duas vezes
+  const salvar = () => {
+    if (mudou) finance.actions.salvarAjuste(l.chave, n)
+    else setV(String(atual))
+  }
+
+  return (
+    <form
+      onSubmit={(e: FormEvent) => {
+        e.preventDefault()
+        ;(document.activeElement as HTMLElement | null)?.blur()
+      }}
+      className="flex items-center justify-between gap-3"
+    >
+      <label htmlFor={id} className="min-w-0">
+        <div className="font-medium">{l.label}</div>
+        <div className="text-xs text-muted tabular-nums">
+          {salario > 0 && valido ? `até ${fmt((salario * n) / 100)} por mês` : `padrão ${l.padrao}%`}
+        </div>
+      </label>
+      <div className="relative shrink-0">
+        <input
+          id={id}
+          inputMode="decimal"
+          value={v}
+          onChange={(e) => setV(e.target.value.replace(/[^\d.,]/g, ''))}
+          onBlur={salvar}
+          disabled={finance.busy}
+          className={cx(inputCls, 'h-9 w-20 pr-7 text-right tabular-nums', !valido && 'border-bad')}
+          aria-invalid={!valido}
+        />
+        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted">%</span>
+      </div>
+    </form>
+  )
+}
+
+function mesAtual() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function usos(model: Model) {
@@ -387,7 +469,8 @@ function ConfigModal({
     dia_vencimento: str(r?.dia_vencimento),
     dias_fechamento: str(r?.dias_fechamento),
     limite: r && num(r.limite) ? fmt(num(r.limite)) : '',
-    mes_seguinte: r ? isYes(r.fatura_vence_mes_seguinte) : true,
+    // cartão novo segue o padrão dos outros cartões
+    mes_seguinte: r ? isYes(r.fatura_vence_mes_seguinte) : model.formas.filter((x) => x.cartao).every((x) => x.mes_seguinte) && model.formas.some((x) => x.cartao),
     cor: str(r?.cor) || (edit.tab === 'categorias' ? corDaPosicao(model.categorias.length) : CORES[5]),
     orcamento: r && num(r.orcamento_mensal) ? fmt(num(r.orcamento_mensal)) : '',
   }))
@@ -489,7 +572,7 @@ function ConfigModal({
                   <PreviaFechamento dia={Number(f.dia_vencimento)} dias={f.dias_fechamento === '' ? null : Number(f.dias_fechamento)} />
                 </>
               )}
-              {f.tipo === 'cartao' && (
+              {f.tipo === 'cartao' && !r && (
                 <>
                   <div>
                     <span className="mb-1.5 block text-xs font-semibold text-muted">Em qual mês a fatura aparece no app?</span>
@@ -547,5 +630,78 @@ function ConfigModal({
         </div>
       </form>
     </div>
+  )
+}
+
+/** Em qual mês as faturas aparecem (vale para todos os cartões) — trocar move os lançamentos de cartão junto. */
+function MesFaturas({ model, finance }: { model: Model; finance: Finance }) {
+  const [destino, setDestino] = useState<'compras' | 'vencimento' | null>(null)
+  const cartoes = model.formas.filter((f) => f.cartao)
+  if (!cartoes.length) return null
+  const naCompra = cartoes.filter((f) => f.mes_seguinte)
+  const modo = naCompra.length === 0 ? 'vencimento' : naCompra.length === cartoes.length ? 'compras' : 'misto'
+
+  const alvo = destino === 'vencimento' ? naCompra : destino === 'compras' ? cartoes.filter((f) => !f.mes_seguinte) : []
+  const nomes = new Set(alvo.map((f) => f.nome.toLowerCase()))
+  const afetados = model.lancamentos.filter((l) => l.row && nomes.has(l.forma_pagamento.toLowerCase())).length
+
+  async function confirmar() {
+    if (!destino) return
+    if (await finance.actions.mudarMesFatura(alvo.map((f) => f.nome), destino === 'vencimento')) setDestino(null)
+  }
+
+  const opcoes = [
+    ['compras', 'No mês das compras', 'A fatura que vence em 10/12 aparece em Novembro.'],
+    ['vencimento', 'No mês do pagamento', 'A fatura que vence em 10/12 aparece em Dezembro, como no app do cartão.'],
+  ] as const
+
+  return (
+    <section className="rounded-2xl bg-soft/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Em qual mês as faturas aparecem</h3>
+          <p className="mt-0.5 text-xs text-muted">
+            {modo === 'misto'
+              ? `Hoje está misturado: ${naCompra.map((f) => f.nome).join(', ')} no mês das compras; os outros no mês do pagamento.`
+              : opcoes.find((o) => o[0] === modo)![2]}
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-1 rounded-xl bg-card p-1 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+          {opcoes.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              disabled={finance.busy}
+              onClick={() => setDestino(modo === id ? null : id)}
+              className={cx(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                modo === id ? 'bg-primary text-white' : destino === id ? 'bg-primary-soft text-primary' : 'text-muted hover:text-ink',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {destino && alvo.length > 0 && (
+        <div className="mt-3 rounded-xl border border-warn/30 bg-warn-soft p-3 text-xs text-warn">
+          <p>
+            Isso muda <b>{alvo.map((f) => f.nome).join(', ')}</b> para o mês {destino === 'vencimento' ? 'do pagamento' : 'das compras'} e move{' '}
+            <b>{afetados} lançamentos</b> desses cartões (gastos, parcelas e fixos), além do início/fim das contas fixas deles,{' '}
+            <b>1 mês para {destino === 'vencimento' ? 'frente' : 'trás'}</b>. Pix, boleto e entradas não mudam.
+          </p>
+          <p className="mt-1.5">Dica: o Google Planilhas guarda o histórico de versões (Arquivo → Histórico de versões), caso queira voltar.</p>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDestino(null)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" disabled={finance.busy} onClick={confirmar}>
+              {finance.busy ? 'Movendo…' : 'Confirmar e mover'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }

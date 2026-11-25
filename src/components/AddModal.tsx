@@ -2,13 +2,16 @@ import { escFecha } from '@/lib/utils'
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { addMeses, brl, dataCurta, faturaDaCompra, formaDe, hoje, mesCurto } from '../lib/finance'
+import { addMeses, brl, dataCurta, dividirParcelas, faturaDaCompra, formaDe, hoje, mesCurto, vencimentoFatura } from '../lib/finance'
 import { num } from '../lib/model'
 import type { Model } from '../lib/model'
 import type { Finance } from '../lib/store'
 import { Button, Field, cx, inputCls } from './kit'
 
 import { Dropdown } from './Dropdown'
+import { MoneyInput } from './MoneyInput'
+import { COBRANCA_VAZIA, CobrancaFields, montarCobranca, pessoasConhecidas } from './CobrancaFields'
+import type { CobrancaForm } from './CobrancaFields'
 import { DatePicker, MonthPicker } from './pickers'
 import { ADD_KINDS } from './addKinds'
 import type { AddKind } from './addKinds'
@@ -42,6 +45,7 @@ export function AddModal({
     dia_vencimento: '',
   }))
   const [err, setErr] = useState<string | null>(null)
+  const [cobranca, setCobranca] = useState<CobrancaForm>(COBRANCA_VAZIA)
   const set = (k: string) => (v: string) => setF((p) => ({ ...p, [k]: v }))
 
   useEffect(() => {
@@ -56,8 +60,14 @@ export function AddModal({
   // Compra no cartão: o mês de referência sai da data da compra e do fechamento da fatura,
   // a menos que você escolha o mês manualmente.
   const usaFatura = kind === 'gasto' || kind === 'parcelado'
-  const fatura = usaFatura ? faturaDaCompra(formaDe(model, f.forma_pagamento ?? ''), kind === 'gasto' ? f.data : hoje()) : null
-  const mesRef = fatura && f.mes_manual !== 'sim' ? fatura.mes_ref : f.mes_ref
+  const fatura = usaFatura ? faturaDaCompra(formaDe(model, f.forma_pagamento ?? ''), f.data || hoje()) : null
+  const automatico = f.mes_manual !== 'sim'
+  const mesRef =
+    fatura && automatico
+      ? fatura.mes_ref
+      : kind === 'parcelado' && automatico && f.data
+        ? f.data.slice(0, 7) // sem cartão: 1ª parcela no mês da compra
+        : f.mes_ref
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -69,20 +79,22 @@ export function AddModal({
     const a = finance.actions
     let ok = false
     const d = f.descricao.trim()
+    const cobr = kind === 'gasto' || kind === 'parcelado' ? montarCobranca(cobranca, valor) : undefined
+    if (typeof cobr === 'string') return setErr(cobr)
     switch (kind) {
       case 'gasto':
-        ok = await a.append('lancamentos', 'L', [
-          { mes_ref: mesRef, data: f.data, descricao: d, valor, categoria: f.categoria, forma_pagamento: f.forma_pagamento, tipo: 'gasto' },
-        ])
+        ok = await a.addGasto({ mes_ref: mesRef, data: f.data, descricao: d, valor, categoria: f.categoria, forma_pagamento: f.forma_pagamento }, cobr)
         break
       case 'parcelado':
         ok = await a.addParcelado({
           descricao: d,
-          valor_parcela: valor,
+          valor_total: valor,
           total_parcelas: parcelas,
           mes_primeira_parcela: mesRef,
           categoria: f.categoria,
           forma_pagamento: f.forma_pagamento,
+          data_compra: f.data,
+          cobranca: cobr,
         })
         break
       case 'fixo':
@@ -168,30 +180,98 @@ export function AddModal({
           {forma}
         </Row>
         {dicaFatura}
+        <CobrancaFields model={model} value={cobranca} onChange={setCobranca} total={valor} />
       </>
     )
-  if (kind === 'parcelado')
+  if (kind === 'parcelado') {
+    const meses = mesRef ? Array.from({ length: Math.min(parcelas, 72) }, (_, k) => addMeses(mesRef, k)) : []
+    const valores = valor > 0 ? dividirParcelas(valor, meses.length || 1) : []
+    const iguais = valores.every((v) => v === valores[0])
+    const formaSel = formaDe(model, f.forma_pagamento ?? '')
+    const manual = f.mes_manual === 'sim'
     campos = (
       <>
         <Row>
           <Field label="Número de parcelas">
             <input type="number" min={1} max={72} className={inputCls} value={f.total_parcelas ?? ''} onChange={(e) => set('total_parcelas')(e.target.value)} />
           </Field>
-          {mesField('Mês da 1ª parcela')}
+          <Field label="Data da compra">
+            <DatePicker value={f.data ?? ''} onChange={set('data')} />
+          </Field>
         </Row>
         <Row>
+          <Field label="Cartão / forma de pagamento">
+            <Dropdown
+              value={f.forma_pagamento ?? ''}
+              onChange={set('forma_pagamento')}
+              opcoes={[...model.formas]
+                .sort((a, b) => Number(b.cartao) - Number(a.cartao))
+                .map((c) => ({ value: c.nome, label: c.nome, cor: c.cor || undefined }))}
+            />
+          </Field>
           {categoria}
-          {forma}
         </Row>
-        {dicaFatura}
-        {valor > 0 && mesRef && (
-          <div className="rounded-xl bg-primary-soft px-3 py-2 text-xs text-primary">
-            {parcelas}× de {brl(valor)} = <b>{brl(valor * parcelas)}</b>, de {mesCurto(mesRef)} até{' '}
-            {mesCurto(addMeses(mesRef, parcelas - 1))}. Cada parcela vira uma linha em “lancamentos”.
+
+        {mesRef && (
+          <div className="rounded-2xl border border-line p-3">
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-ink">Parcelas</span>
+              {valor > 0 && (
+                <span className="text-muted">
+                  {brl(valor)} em{' '}
+                  <b className="text-ink">
+                    {iguais ? `${parcelas}× de ${brl(valores[0])}` : `1× ${brl(valores[0])} + ${parcelas - 1}× ${brl(valores[valores.length - 1])}`}
+                  </b>
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {meses.map((m, k) => (
+                <span
+                  key={m}
+                  className={cx(
+                    'rounded-lg px-2 py-1 text-[11px] font-medium tabular-nums',
+                    k === 0 ? 'bg-primary text-white' : 'bg-soft text-muted',
+                  )}
+                >
+                  {k + 1}/{parcelas} · {formaSel?.cartao && vencimentoFatura(formaSel, m) ? `paga ${dataCurta(vencimentoFatura(formaSel, m)!)}` : mesCurto(m)}
+                  {valores[k] !== undefined && <span className="ml-1 opacity-80">{brl(valores[k])}</span>}
+                </span>
+              ))}
+            </div>
+            <div className="mt-2.5 text-xs text-muted">
+              {manual ? (
+                <div className="space-y-2">
+                  {mesField('Mês da 1ª parcela')}
+                  {fatura && (
+                    <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setF((p) => ({ ...p, mes_manual: '' }))}>
+                      Voltar ao automático ({mesCurto(fatura.mes_ref)})
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {fatura ? (
+                    <>
+                      Compra em {dataCurta(f.data)}: a 1ª parcela entra na fatura <b className="text-ink">{f.forma_pagamento}</b> que fecha em{' '}
+                      {dataCurta(fatura.fechamento)} e vence em <b className="text-ink">{dataCurta(fatura.vencimento)}</b> (no app, fatura de{' '}
+                      {mesCurto(fatura.mes_ref)}).{' '}
+                    </>
+                  ) : (
+                    <>A 1ª parcela fica no mês da compra. </>
+                  )}
+                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setF((p) => ({ ...p, mes_manual: 'sim' }))}>
+                    Mudar mês
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         )}
+        <CobrancaFields model={model} value={cobranca} onChange={setCobranca} total={valor} parcelas={parcelas} />
       </>
     )
+  }
   if (kind === 'fixo')
     campos = (
       <>
@@ -200,7 +280,7 @@ export function AddModal({
           {forma}
         </Row>
         <Row>
-          <Field label="Dia de vencimento (opcional)">
+          <Field label="Dia da cobrança (opcional)">
             <input type="number" min={1} max={31} className={inputCls} value={f.dia_vencimento ?? ''} onChange={(e) => set('dia_vencimento')(e.target.value)} />
           </Field>
           {mesField('Começa em')}
@@ -259,7 +339,7 @@ export function AddModal({
             onChange={(e) => set('pessoa')(e.target.value)}
             placeholder="Nome"
           />
-          <datalist id="pessoas">{opts([...new Set(model.receber.map((r) => r.pessoa))])}</datalist>
+          <datalist id="pessoas">{opts(pessoasConhecidas(model))}</datalist>
         </Field>
         {mesField()}
       </Row>
@@ -298,8 +378,12 @@ export function AddModal({
             <Field label={kind === 'investimento' ? 'Descrição (opcional)' : 'Descrição'}>
               <input autoFocus className={inputCls} value={f.descricao ?? ''} onChange={(e) => set('descricao')(e.target.value)} />
             </Field>
-            <Field label={kind === 'parcelado' ? 'Valor da parcela' : 'Valor (R$)'}>
-              <input inputMode="decimal" className={inputCls} placeholder="0,00" value={f.valor ?? ''} onChange={(e) => set('valor')(e.target.value)} />
+            <Field label={kind === 'parcelado' ? 'Valor total da compra' : 'Valor (R$)'}>
+              {kind === 'parcelado' ? (
+                <MoneyInput value={f.valor ?? ''} onChange={set('valor')} />
+              ) : (
+                <input inputMode="decimal" className={inputCls} placeholder="0,00" value={f.valor ?? ''} onChange={(e) => set('valor')(e.target.value)} />
+              )}
             </Field>
           </Row>
           {campos}
