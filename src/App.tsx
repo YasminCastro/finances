@@ -1,4 +1,4 @@
-import { Car, ChevronDown, PiggyBank, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
+import { BarChart3, Car, TrendingUp, ChevronDown, PiggyBank, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
@@ -16,16 +16,20 @@ import { Overview } from './pages/Overview'
 import { Receber } from './pages/Receber'
 import { Carro } from './pages/Carro'
 import { Investimentos } from './pages/Investimentos'
+import { Dashboard } from './pages/Dashboard'
+import { Salarios } from './pages/Salarios'
 
-type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'carro' | 'investimentos' | 'config'
+type Page = 'overview' | 'dashboard' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'carro' | 'salarios' | 'investimentos' | 'config'
 const PAGES: { id: Page; label: string; curto?: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Visão geral', icon: <LayoutDashboard size={18} /> },
+  { id: 'dashboard', label: 'Painel', icon: <BarChart3 size={18} /> },
   { id: 'lancamentos', label: 'Lançamentos', icon: <List size={18} /> },
   { id: 'fixos', label: 'Fixos', icon: <Repeat size={18} /> },
   { id: 'parcelamentos', label: 'Parcelas', icon: <Layers size={18} /> },
   { id: 'receber', label: 'A receber', icon: <HandCoins size={18} /> },
   { id: 'investimentos', label: 'Investimentos', curto: 'Investir', icon: <PiggyBank size={18} /> },
   { id: 'carro', label: 'Carro', icon: <Car size={18} /> },
+  { id: 'salarios', label: 'Salários', icon: <TrendingUp size={18} /> },
 ]
 const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
 
@@ -51,6 +55,8 @@ export default function App() {
   const [mes, setMes] = useState(mesAtual)
   const [add, setAdd] = useState<AddKind | null>(null)
   const closeAdd = useCallback(() => setAdd(null), [])
+  // páginas que não dependem do mês (ex.: Salários) não mostram o seletor de mês nem o Adicionar das finanças
+  const semMes = page === 'salarios'
 
   if (!token) return <Login onLogin={login} error={error} dark={dark} setDark={setDark} />
 
@@ -93,6 +99,9 @@ export default function App() {
           <div className="lg:hidden">
             <Brand compact />
           </div>
+          {semMes ? (
+            <h1 className="min-w-0 flex-1 truncate px-1.5 text-lg font-bold tracking-tight sm:text-2xl">{PAGES.find((p) => p.id === page)?.label}</h1>
+          ) : (
           <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
             <IconBtn label="Mês anterior" onClick={() => setMes(addMeses(mes, -1))}>
               <ChevronLeft size={18} />
@@ -114,10 +123,11 @@ export default function App() {
               </button>
             )}
           </div>
+          )}
           <IconBtn label="Atualizar dados" onClick={reload}>
             <RefreshCw size={17} className={cx((loading || busy) && 'animate-spin')} />
           </IconBtn>
-          <AddButton onPick={setAdd} />
+          {!semMes && <AddButton onPick={setAdd} />}
         </header>
 
         {error && (
@@ -135,6 +145,8 @@ export default function App() {
           </div>
         ) : page === 'overview' ? (
           <Overview model={model} mes={mes} finance={finance} />
+        ) : page === 'dashboard' ? (
+          <Dashboard key={mes} model={model} mes={mes} />
         ) : page === 'fixos' ? (
           <Fixos model={model} mes={mes} finance={finance} />
         ) : page === 'parcelamentos' ? (
@@ -145,6 +157,8 @@ export default function App() {
           <Investimentos model={model} mes={mes} setMes={setMes} finance={finance} />
         ) : page === 'carro' ? (
           <Carro model={model} mes={mes} setMes={setMes} finance={finance} />
+        ) : page === 'salarios' ? (
+          <Salarios model={model} finance={finance} />
         ) : page === 'config' ? (
           <Config model={model} finance={finance} dark={dark} setDark={setDark} />
         ) : (

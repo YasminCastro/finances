@@ -437,6 +437,13 @@ export function useFinance() {
           else await appendRows(t, d, 'carro_trocas', [{ id: newId('T'), ...v }])
         }),
 
+      // ----- salários -----
+      salvarSalario: (row: Row | undefined, valores: Record<string, Cell>) =>
+        run((t, d) => (row ? updateRow(t, d, 'salarios', row, valores) : appendRows(t, d, 'salarios', [{ id: newId('S'), ...valores }]))),
+      excluirSalario: (row: Row) => run((t, d) => deleteRows(t, d, 'salarios', [row])),
+      importarSalarios: (linhas: Record<string, Cell>[]) =>
+        run((t, d) => appendRows(t, d, 'salarios', linhas.map((l, k) => ({ id: newId('S') + k, ...l })))),
+
       excluirTroca: (row: Row) => run((t, d) => deleteRows(t, d, 'carro_trocas', [row])),
 
       /** Importa trocas coladas da planilha antiga. */

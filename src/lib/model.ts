@@ -246,6 +246,18 @@ export interface Rodizio {
   row: Row
 }
 
+/** Um degrau da progressão salarial (aba salarios); não entra nas finanças. */
+export interface Salario {
+  id: string
+  /** AAAA-MM-DD */
+  data: string
+  valor: number
+  empresa: string
+  cargo: string
+  motivo: string
+  row: Row
+}
+
 /** Troca ou manutenção feita no carro (aba carro_trocas). */
 export interface Troca {
   id: string
@@ -291,6 +303,8 @@ export interface Model {
   receber: Receber[]
   rodizios: Rodizio[]
   trocas: Troca[]
+  /** progressão salarial, da mais antiga para a mais recente */
+  salarios: Salario[]
   formas: Forma[]
   /** sempre em ordem alfabética */
   categorias: Categoria[]
@@ -399,6 +413,18 @@ export function buildModel(db: DB): Model {
         fixo_id: str(r.fixo_id),
         row: r,
       })),
+    salarios: (t.salarios ?? [])
+      .filter((r) => normData(r.data_inicio) && num(r.salario) > 0)
+      .map((r) => ({
+        id: str(r.id),
+        data: normData(r.data_inicio),
+        valor: num(r.salario),
+        empresa: str(r.empresa),
+        cargo: str(r.cargo),
+        motivo: str(r.motivo),
+        row: r,
+      }))
+      .sort((a, b) => a.data.localeCompare(b.data)),
     trocas: (t.carro_trocas ?? [])
       .filter((r) => str(r.item))
       .map((r) => ({

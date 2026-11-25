@@ -125,6 +125,7 @@ export const TABS = [
   'ajustes',
   'carro_trocas',
   'rodizios',
+  'salarios',
 ] as const
 export type Tab = (typeof TABS)[number]
 
@@ -133,6 +134,7 @@ const AUTO_CREATE: Partial<Record<Tab, string[]>> = {
   entradas_fixas: ['id', 'descricao', 'valor', 'ativo', 'mes_inicio', 'mes_fim', 'serie'],
   ajustes: ['chave', 'valor'],
   rodizios: ['id', 'nome', 'membros', 'eu', 'mes_inicio', 'valor', 'fixo_id'],
+  salarios: ['id', 'data_inicio', 'salario', 'empresa', 'cargo', 'motivo'],
   carro_trocas: ['id', 'data', 'item', 'categoria', 'observacao', 'km', 'proxima_data', 'proxima_km', 'custo', 'lancamento_id'],
 }
 
