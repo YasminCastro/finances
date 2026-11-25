@@ -4,24 +4,14 @@ import type { ReactNode } from 'react'
 import { Button, Card, CardTitle, Money, cx, inputCls } from '../components/kit'
 import { Dropdown } from '../components/Dropdown'
 import { MoneyInput } from '../components/MoneyInput'
-import { MESES, addMeses, fmt, hoje, investimentosResumo, mesAtual, mesCurto, metaDoDestino, salarioFixo } from '../lib/finance'
+import { MESES, addMeses, corDoDestino, fmt, hoje, investimentosResumo, mesAtual, mesCurto, metaDoDestino, salarioFixo } from '../lib/finance'
 import { num } from '../lib/model'
 import type { Investimento, Model } from '../lib/model'
 import type { Cell, Row } from '../lib/google'
 import type { Finance } from '../lib/store'
 
-/** Cores fixas por posição do destino na lista de Configurações (validadas para daltonismo, claro e escuro). */
-const PALETA = ['#0d9488', '#6366f1', '#d97706', '#0284c7', '#e11d48']
-const CINZA = '#94a3b8'
-
 function useCores(model: Model) {
-  return useMemo(() => {
-    const proprios = model.destinos.filter((d) => d.toLowerCase() !== 'outros')
-    return (d: string) => {
-      const k = proprios.indexOf(d)
-      return k >= 0 && k < PALETA.length ? PALETA[k] : CINZA
-    }
-  }, [model.destinos])
+  return useMemo(() => (d: string) => corDoDestino(model, d), [model])
 }
 
 const somar = (xs: { valor: number }[]) => xs.reduce((a, x) => a + x.valor, 0)

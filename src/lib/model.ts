@@ -56,6 +56,8 @@ export interface Lancamento {
   fixo_id: string
   /** tipo de custo do carro escolhido à mão (Combustível, Mecânico…); vazio = deduzido pela categoria e descrição */
   carro: string
+  /** AAAA-MM-DD: quando pagar (contas fora do cartão, ex.: pagar a uma pessoa); nas parcelas vale o mesmo dia em cada mês */
+  vencimento?: string
   row?: Row
   /** fixo calculado a partir do modelo (ainda não lançado na planilha) */
   projetado?: boolean
@@ -336,6 +338,7 @@ export function buildModel(db: DB): Model {
       parcelamento_id: str(r.parcelamento_id),
       fixo_id: str(r.fixo_id),
       carro: str(r.carro),
+      vencimento: normData(r.vencimento),
       row: r,
     }
   })

@@ -130,9 +130,13 @@ export function itensDoMes(model: Model, mes: string): { itens: Lancamento[]; fi
       const dia = diaCobranca(l)
       return dia ? { ...l, data: venc(mes, dia)! } : l
     })
+  // fixos lançados sem fixo_id (vindos da planilha antiga) só são reconhecidos pelo nome
   const legado = doMes.some((l) => l.tipo === 'fixo' && !l.fixo_id)
-  if (legado || (model.primeiroMes && mes < model.primeiroMes)) return { itens: doMes, fixosProjetados: false }
+  // meses passados no formato antigo ficam como foram lançados; do mês atual em diante, completa com os fixos que faltam
+  if ((legado && mes < mesAtual()) || (model.primeiroMes && mes < model.primeiroMes)) return { itens: doMes, fixosProjetados: false }
+  const nomesLancados = new Set(doMes.filter((l) => l.tipo === 'fixo' && !l.fixo_id).map((l) => l.descricao.trim().toLowerCase()))
   const ajustadas = new Set(doMes.filter((l) => l.tipo === 'fixo').map((l) => l.fixo_id))
+  for (const f of model.fixos) if (nomesLancados.has(f.descricao.trim().toLowerCase())) ajustadas.add(f.serie)
   const projetados: Lancamento[] = model.fixos
     .filter((f) => !ajustadas.has(f.serie))
     .map((f) => ({ f, oc: ocorrenciaFixo(f, mes) }))
@@ -271,7 +275,12 @@ export function contasDoMes(model: Model, mes: string): Conta[] {
           .filter(Boolean)
           .join(' · '),
         valor: l.valor,
-        vencimento: venc(mes, modelo?.dia_vencimento ?? null),
+        // data de pagamento do lançamento (no mesmo dia em cada mês, nas parcelas) ou o dia da cobrança do fixo
+        vencimento: l.vencimento
+          ? l.tipo === 'parcela'
+            ? venc(mes, Number(l.vencimento.slice(8, 10)))
+            : l.vencimento
+          : venc(mes, modelo?.dia_vencimento ?? null),
         cor: f?.cor || '',
         cartao: false,
       })
@@ -566,4 +575,11 @@ export function metaDoDestino(model: Model, destino: string, mes: string): numbe
   const m = model.metas[destino]
   if (!m) return null
   return m.meses ? m.meses * salarioFixo(model, mes) : m.valor
+}
+
+/** Cores fixas por posição do destino na lista de Configurações (validadas para daltonismo, claro e escuro); "Outros" e excedentes ficam cinza. */
+const PALETA_DESTINOS = ['#0d9488', '#6366f1', '#d97706', '#0284c7', '#e11d48']
+export function corDoDestino(model: Model, destino: string) {
+  const k = model.destinos.filter((d) => d.toLowerCase() !== 'outros').indexOf(destino)
+  return k >= 0 && k < PALETA_DESTINOS.length ? PALETA_DESTINOS[k] : '#94a3b8'
 }

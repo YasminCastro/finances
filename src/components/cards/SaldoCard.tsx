@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Wallet } from 'lucide-react'
 import { useState } from 'react'
-import { brl, fmt, mesCurto, pct } from '../../lib/finance'
+import { brl, fmt, mesCurto, nomeMes, pct } from '../../lib/finance'
 import type { ResumoMes } from '../../lib/finance'
 import { num } from '../../lib/model'
 import type { Entrada } from '../../lib/model'
@@ -14,11 +14,13 @@ export interface PontoHistorico {
 
 export function SaldoCard({
   r,
+  mes,
   historico,
   onLancarEntradas,
   busy,
 }: {
   r: ResumoMes
+  mes: string
   historico: PontoHistorico[]
   onLancarEntradas: (itens: { descricao: string; valor: number }[]) => void
   busy: boolean
@@ -37,9 +39,12 @@ export function SaldoCard({
     <Card className="flex flex-col lg:col-span-2">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-[15px] font-semibold">Saldo previsto</h2>
-          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Money value={r.saldo} className="text-5xl sm:text-6xl" tone={positivo ? 'default' : 'bad'} />
+          <h2 className="text-[15px] font-semibold">
+            Saldo previsto
+            <span className="ml-1.5 text-xs font-medium text-muted">· {nomeMes(mes)}</span>
+          </h2>
+          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Money value={r.saldo} className="text-5xl" tone={positivo ? 'default' : 'bad'} />
             <div className="border-line sm:border-l sm:pl-5">
               <div className={cx('flex items-center gap-1 text-sm font-semibold', positivo ? 'text-good' : 'text-bad')}>
                 {positivo ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
@@ -49,12 +54,12 @@ export function SaldoCard({
             </div>
           </div>
         </div>
-        <div className="hidden size-20 shrink-0 items-center justify-center rounded-3xl bg-primary-soft text-primary sm:flex">
-          <Wallet size={40} strokeWidth={1.6} />
+        <div className="hidden size-14 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary sm:flex">
+          <Wallet size={28} strokeWidth={1.7} />
         </div>
       </div>
 
-      <div className="mt-7 flex h-3 gap-1 overflow-hidden rounded-full bg-soft">
+      <div className="mt-6 flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-soft">
         {segs.map((s) =>
           s.valor > 0 ? (
             <div key={s.label} title={`${s.label}: ${brl(s.valor)}`} style={{ width: `${(s.valor / base) * 100}%`, background: s.cor }} />
@@ -84,7 +89,7 @@ export function SaldoCard({
         />
       </div>
 
-      <Historico pontos={historico} />
+      <Historico pontos={historico} mes={mes} />
 
       {r.entradasProjetadas && (
         <EntradasEstimadas
@@ -146,36 +151,56 @@ function EntradasEstimadas({
   )
 }
 
-function Historico({ pontos }: { pontos: PontoHistorico[] }) {
+function Historico({ pontos, mes }: { pontos: PontoHistorico[]; mes: string }) {
   const max = Math.max(...pontos.flatMap((p) => [p.entradas, p.saidas]), 1)
+  const h = (v: number) => Math.max(1.5, (v / max) * 100)
   return (
-    <div className="mt-6 flex min-h-40 flex-1 flex-col border-t border-line pt-4">
-      <div className="mb-3 flex items-center justify-between text-xs">
-        <span className="font-semibold text-muted">Últimos 6 meses</span>
+    <div className="mt-6 flex min-h-44 flex-1 flex-col border-t border-line pt-4">
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="font-semibold text-muted">Mês a mês</span>
         <span className="flex gap-3 text-muted">
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-good" /> Entradas
           </span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-seg-2" /> Saídas
           </span>
         </span>
       </div>
-      <div className="flex flex-1 items-end gap-3 sm:gap-6">
-        {pontos.map((p, k) => {
-          const atual = k === pontos.length - 1
+      <div className="relative flex flex-1 gap-1.5 sm:gap-3">
+        {/* linha de base */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 h-px bg-line" aria-hidden />
+        {pontos.map((p) => {
+          const atual = p.mes === mes
+          const futuro = p.mes > mes
           const saldo = p.entradas - p.saidas
+          const topo = h(Math.max(p.entradas, p.saidas))
           return (
-            <div key={p.mes} className="flex h-full flex-1 flex-col items-center gap-1.5" title={`Entradas ${brl(p.entradas)} · Saídas ${brl(p.saidas)}`}>
-              <div className={cx('text-[10px] font-semibold whitespace-nowrap', saldo >= 0 ? 'text-good' : 'text-bad')}>
-                {saldo >= 0 ? '+' : '−'}
-                {Math.abs(Math.round(saldo)).toLocaleString('pt-BR')}
+            <div
+              key={p.mes}
+              aria-current={atual ? 'date' : undefined}
+              className={cx('flex flex-1 flex-col rounded-2xl px-1 pt-1 transition-colors', atual ? 'bg-primary-soft/70' : 'hover:bg-soft/70')}
+              title={`${atual ? 'Mês atual · ' : futuro ? 'Previsão · ' : ''}Entradas ${brl(p.entradas)} · Saídas ${brl(p.saidas)} · Saldo ${brl(saldo)}`}
+            >
+              {/* área das barras: o saldo fica logo acima da barra mais alta */}
+              <div className={cx('relative mt-6 flex flex-1 items-end justify-center gap-1', !atual && (futuro ? 'opacity-40' : 'opacity-70'))}>
+                <span
+                  className={cx(
+                    'absolute inset-x-0 text-center whitespace-nowrap tabular-nums',
+                    atual ? 'text-xs font-bold' : 'text-[10px] font-semibold',
+                    saldo >= 0 ? 'text-good' : 'text-bad',
+                  )}
+                  style={{ bottom: `calc(${topo}% + 6px)` }}
+                >
+                  {saldo >= 0 ? '+' : '−'}
+                  {Math.abs(Math.round(saldo)).toLocaleString('pt-BR')}
+                </span>
+                <div className="w-full max-w-6 rounded-t bg-good" style={{ height: `${h(p.entradas)}%` }} />
+                <div className="w-full max-w-6 rounded-t bg-seg-2" style={{ height: `${h(p.saidas)}%` }} />
               </div>
-              <div className="flex w-full flex-1 items-end justify-center gap-1">
-                <div className="w-full max-w-5 rounded-t-md bg-good/80" style={{ height: `${Math.max(2, (p.entradas / max) * 100)}%` }} />
-                <div className="w-full max-w-5 rounded-t-md bg-seg-2" style={{ height: `${Math.max(2, (p.saidas / max) * 100)}%` }} />
+              <div className={cx('flex h-8 items-center justify-center text-[11px] whitespace-nowrap', atual ? 'font-bold text-primary' : 'text-muted')}>
+                {mesCurto(p.mes)}
               </div>
-              <div className={cx('text-[11px]', atual ? 'font-bold text-ink' : 'text-muted')}>{mesCurto(p.mes)}</div>
             </div>
           )
         })}

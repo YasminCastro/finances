@@ -140,7 +140,7 @@ const AUTO_CREATE: Partial<Record<Tab, string[]>> = {
 const AUTO_COLUMNS: Partial<Record<Tab, string[]>> = {
   fixos: ['mes_inicio', 'mes_fim', 'serie', 'frequencia_meses', 'parcelas'],
   entradas_fixas: ['mes_inicio', 'mes_fim', 'serie'],
-  lancamentos: ['fixo_id', 'carro'],
+  lancamentos: ['fixo_id', 'carro', 'vencimento'],
   formas_pagamento: ['dias_fechamento', 'limite'],
   categorias: ['cor'],
   destinos_investimento: ['percentual', 'meta', 'meta_meses'],

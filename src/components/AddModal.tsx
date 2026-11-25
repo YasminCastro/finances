@@ -43,6 +43,7 @@ export function AddModal({
     destino: model.destinos[0] ?? '',
     pessoa: '',
     dia_vencimento: '',
+    vencimento: '',
   }))
   const [err, setErr] = useState<string | null>(null)
   const [cobranca, setCobranca] = useState<CobrancaForm>(COBRANCA_VAZIA)
@@ -69,6 +70,10 @@ export function AddModal({
         ? f.data.slice(0, 7) // sem cartão: 1ª parcela no mês da compra
         : f.mes_ref
 
+  // fora do cartão (pagar a uma pessoa, boleto, pix…) dá para dizer quando pagar
+  const semCartao = !formaDe(model, f.forma_pagamento ?? '')?.cartao
+  const diaPagamento = Math.round(num(f.dia_pagamento))
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setErr(null)
@@ -76,6 +81,7 @@ export function AddModal({
     if (precisaDescricao && !f.descricao?.trim()) return setErr('Preencha a descrição.')
     if (!valor) return setErr('Informe um valor.')
     if (kind === 'receber' && !f.pessoa?.trim()) return setErr('Informe quem te deve.')
+    if (kind === 'parcelado' && semCartao && f.dia_pagamento && !(diaPagamento >= 1 && diaPagamento <= 31)) return setErr('O dia de pagar deve ser entre 1 e 31.')
     const a = finance.actions
     let ok = false
     const d = f.descricao.trim()
@@ -83,7 +89,18 @@ export function AddModal({
     if (typeof cobr === 'string') return setErr(cobr)
     switch (kind) {
       case 'gasto':
-        ok = await a.addGasto({ mes_ref: mesRef, data: f.data, descricao: d, valor, categoria: f.categoria, forma_pagamento: f.forma_pagamento }, cobr)
+        ok = await a.addGasto(
+          {
+            mes_ref: mesRef,
+            data: f.data,
+            descricao: d,
+            valor,
+            categoria: f.categoria,
+            forma_pagamento: f.forma_pagamento,
+            vencimento: semCartao ? f.vencimento : '',
+          },
+          cobr,
+        )
         break
       case 'parcelado':
         ok = await a.addParcelado({
@@ -95,6 +112,7 @@ export function AddModal({
           forma_pagamento: f.forma_pagamento,
           data_compra: f.data,
           cobranca: cobr,
+          dia_pagamento: semCartao && diaPagamento ? diaPagamento : undefined,
         })
         break
       case 'fixo':
@@ -180,6 +198,11 @@ export function AddModal({
           {forma}
         </Row>
         {dicaFatura}
+        {semCartao && (
+          <Field label="Data de pagamento (opcional)">
+            <DatePicker value={f.vencimento ?? ''} onChange={set('vencimento')} />
+          </Field>
+        )}
         <CobrancaFields model={model} value={cobranca} onChange={setCobranca} total={valor} />
       </>
     )
@@ -211,6 +234,19 @@ export function AddModal({
           </Field>
           {categoria}
         </Row>
+        {semCartao && (
+          <Field label="Dia de pagar cada parcela (opcional)">
+            <input
+              type="number"
+              min={1}
+              max={31}
+              placeholder="ex.: 10"
+              className={inputCls}
+              value={f.dia_pagamento ?? ''}
+              onChange={(e) => set('dia_pagamento')(e.target.value)}
+            />
+          </Field>
+        )}
 
         {mesRef && (
           <div className="rounded-2xl border border-line p-3">
@@ -234,7 +270,12 @@ export function AddModal({
                     k === 0 ? 'bg-primary text-white' : 'bg-soft text-muted',
                   )}
                 >
-                  {k + 1}/{parcelas} · {formaSel?.cartao && vencimentoFatura(formaSel, m) ? `paga ${dataCurta(vencimentoFatura(formaSel, m)!)}` : mesCurto(m)}
+                  {k + 1}/{parcelas} ·{' '}
+                  {formaSel?.cartao && vencimentoFatura(formaSel, m)
+                    ? `paga ${dataCurta(vencimentoFatura(formaSel, m)!)}`
+                    : diaPagamento >= 1 && diaPagamento <= 31
+                      ? `paga ${String(diaPagamento).padStart(2, '0')}/${m.slice(5)}`
+                      : mesCurto(m)}
                   {valores[k] !== undefined && <span className="ml-1 opacity-80">{brl(valores[k])}</span>}
                 </span>
               ))}

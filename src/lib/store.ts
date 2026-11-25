@@ -34,6 +34,8 @@ export interface NovoParcelado {
   data_compra?: string
   /** parte da compra que é de outra pessoa (vira cobrança em cada parcela) */
   cobranca?: Cobranca
+  /** dia do mês para pagar cada parcela (fora do cartão) */
+  dia_pagamento?: number
 }
 
 /** Compra que você pagou (toda ou em parte) por outra pessoa. */
@@ -169,6 +171,7 @@ export function useFinance() {
             tipo: 'parcela',
             parcelas_restantes: p.total_parcelas - k,
             parcelamento_id: pid,
+            vencimento: p.dia_pagamento ? `${addMeses(p.mes_primeira_parcela, k)}-${String(p.dia_pagamento).padStart(2, '0')}` : '',
           }))
           await appendRows(t, d, 'lancamentos', linhas)
           await appendRows(t, d, 'a_receber', linhasCobranca(p.cobranca, linhas))
