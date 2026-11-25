@@ -149,6 +149,7 @@ export function itensDoMes(model: Model, mes: string): { itens: Lancamento[]; fi
       parcelas_restantes: null,
       parcelamento_id: '',
       fixo_id: f.serie,
+      carro: '',
       projetado: true,
       fixo: f,
     }))
@@ -474,4 +475,80 @@ export function investimentosResumo(model: Model, ateMes: string) {
     total: sum(ate),
     destinos: [...destinos.entries()].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor),
   }
+}
+
+// ---------- carro ----------
+
+/** Tipos de custo do carro (as linhas da planilha antiga "Carro"). */
+export const CUSTOS_CARRO = ['Combustível', 'Mecânico', 'Documento', 'Multa', 'Estética', 'Outros'] as const
+export type CustoCarro = (typeof CUSTOS_CARRO)[number]
+
+const semAcento = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+/** Categorias que são do carro: "Carro", "Combustível" (e variações como "Veículo", "Automóvel"). */
+export function ehCategoriaCarro(categoria: string) {
+  const c = semAcento(categoria)
+  return c === 'carro' || c.startsWith('combust') || c.startsWith('veicul') || c.startsWith('automov')
+}
+
+/**
+ * Tipo de custo do carro de um lançamento, ou null se não for do carro.
+ * Vale o que foi escolhido à mão (coluna "carro"); senão, deduz pela categoria e pela descrição.
+ */
+export function custoCarro(l: Pick<Lancamento, 'categoria' | 'descricao' | 'carro'>): CustoCarro | null {
+  if (l.carro === NAO_E_CARRO) return null
+  if (l.carro) return CUSTOS_CARRO.find((c) => semAcento(c) === semAcento(l.carro)) ?? 'Outros'
+  // categoria do carro, ou a descrição fala do carro (ex.: "Sensor do carro" na categoria Outros)
+  if (!ehCategoriaCarro(l.categoria) && !/carro/.test(semAcento(l.descricao))) return null
+  return custoDeduzido(l)
+}
+
+/** Valor da coluna "carro" que tira um lançamento do carro (quando a dedução acerta errado). */
+export const NAO_E_CARRO = 'não'
+
+/** O tipo que o app deduz quando ninguém escolheu (mostrado como "automático"). */
+export function custoDeduzido(l: Pick<Lancamento, 'categoria' | 'descricao'>): CustoCarro {
+  const c = semAcento(l.categoria)
+  const d = semAcento(l.descricao)
+  if (c.startsWith('combust') || /gasolina|etanol|alcool|combust|posto|abastec|diesel|gnv/.test(d)) return 'Combustível'
+  if (/multa|infracao/.test(d)) return 'Multa'
+  if (/ipva|licenciamento|detran|documento|crlv|dpvat|transferencia|vistoria|emplacamento/.test(d)) return 'Documento'
+  if (/lava|lavagem|polimento|estetica|higieniza|enceramento|cera\b/.test(d)) return 'Estética'
+  if (/estacionamento|pedagio|zona azul|seguro/.test(d)) return 'Outros'
+  return 'Mecânico'
+}
+
+export interface CustosCarroAno {
+  /** valor por tipo, um número por mês (jan..dez) */
+  porTipo: Record<CustoCarro, number[]>
+  porMes: number[]
+  total: number
+}
+
+/** Custos do carro no ano, por tipo e mês (inclui fixos projetados e parcelas). */
+export function custosCarroAno(model: Model, ano: number): CustosCarroAno {
+  const porTipo = Object.fromEntries(CUSTOS_CARRO.map((c) => [c, Array(12).fill(0)])) as Record<CustoCarro, number[]>
+  const porMes = Array(12).fill(0) as number[]
+  for (let m = 0; m < 12; m++) {
+    for (const l of itensDoMes(model, `${ano}-${String(m + 1).padStart(2, '0')}`).itens) {
+      const c = custoCarro(l)
+      if (!c) continue
+      porTipo[c][m] += l.valor
+      porMes[m] += l.valor
+    }
+  }
+  return { porTipo, porMes, total: porMes.reduce((a, b) => a + b, 0) }
+}
+
+/** Lançamentos do carro no mês, com o tipo de custo. */
+export function lancamentosCarro(model: Model, mes: string): { l: Lancamento; custo: CustoCarro }[] {
+  return itensDoMes(model, mes)
+    .itens.map((l) => ({ l, custo: custoCarro(l) }))
+    .filter((x): x is { l: Lancamento; custo: CustoCarro } => x.custo !== null)
+    .sort((a, b) => (b.l.data || '').localeCompare(a.l.data || ''))
 }

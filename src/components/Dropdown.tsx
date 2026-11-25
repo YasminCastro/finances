@@ -1,6 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
@@ -41,6 +41,8 @@ export function Dropdown({
   placeholder = 'Selecione',
   className,
   disabled,
+  gatilho,
+  semBusca,
 }: {
   value: string
   onChange: (v: string) => void
@@ -48,6 +50,10 @@ export function Dropdown({
   placeholder?: string
   className?: string
   disabled?: boolean
+  /** conteúdo próprio do botão (ex.: uma etiqueta); aí o botão só usa `className` */
+  gatilho?: (atual: OpcaoDropdown | undefined) => ReactNode
+  /** listas curtas: sem o campo de busca */
+  semBusca?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [busca, setBusca] = useState('')
@@ -61,7 +67,7 @@ export function Dropdown({
 
   // Digitar com o campo fechado e focado abre a lista já buscando pela letra digitada.
   function onKeyDownTrigger(e: KeyboardEvent<HTMLButtonElement>) {
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') {
+    if (!semBusca && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') {
       e.preventDefault()
       abrir(e.key)
     } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -85,20 +91,30 @@ export function Dropdown({
           aria-expanded={open}
           disabled={disabled}
           onKeyDown={onKeyDownTrigger}
-          className={cn(
-            'flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-left text-sm text-ink outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50',
-            className,
-          )}
+          className={
+            gatilho
+              ? cn('outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default', className)
+              : cn(
+                  'flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-left text-sm text-ink outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50',
+                  className,
+                )
+          }
         >
-          <span className={cn('flex min-w-0 items-center gap-2', !atual && 'text-muted')}>
-            {atual?.cor && <span className="size-2.5 shrink-0 rounded-full" style={{ background: atual.cor }} />}
-            <span className="truncate">{atual?.label ?? placeholder}</span>
-          </span>
-          <ChevronDown className="size-4 shrink-0 text-muted" />
+          {gatilho ? (
+            gatilho(atual)
+          ) : (
+            <>
+              <span className={cn('flex min-w-0 items-center gap-2', !atual && 'text-muted')}>
+                {atual?.cor && <span className="size-2.5 shrink-0 rounded-full" style={{ background: atual.cor }} />}
+                <span className="truncate">{atual?.label ?? placeholder}</span>
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-muted" />
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-(--radix-popover-trigger-width) min-w-48 rounded-xl border-line p-0"
+        className={cn('min-w-48 rounded-xl border-line p-0', gatilho ? 'w-auto' : 'w-(--radix-popover-trigger-width)')}
         align="start"
         onOpenAutoFocus={(e) => {
           // foca a busca com o cursor no fim, para não perder a letra já digitada
@@ -111,7 +127,10 @@ export function Dropdown({
         }}
       >
         <Command filter={filtro}>
-          <CommandInput ref={inputRef} placeholder="Buscar…" value={busca} onValueChange={setBusca} />
+          {/* sem busca: o campo continua lá (invisível) só para as setas do teclado funcionarem */}
+          <div className={semBusca ? 'h-0 overflow-hidden' : undefined}>
+            <CommandInput ref={inputRef} placeholder="Buscar…" value={busca} onValueChange={setBusca} />
+          </div>
           <CommandList className="max-h-64">
             <CommandEmpty>Nada encontrado.</CommandEmpty>
             {opcoes.map((o) => (

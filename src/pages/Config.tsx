@@ -1,5 +1,5 @@
 import { escFecha } from '@/lib/utils'
-import { Barcode, CreditCard, Percent, ExternalLink, Moon, Pencil, PiggyBank, Plus, QrCode, Sun, Tags, Trash2, X } from 'lucide-react'
+import { Barcode, CreditCard, Percent, ExternalLink, LogOut, Moon, Pencil, PiggyBank, Plus, QrCode, Sun, Tags, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Bar, Button, Card, CardTitle, Empty, Field, cx, inputCls } from '../components/kit'
@@ -158,6 +158,9 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
       </div>
 
       {edit && <ConfigModal key={edit.tab + (edit.row?._row ?? 'novo')} edit={edit} model={model} finance={finance} uso={uso} onClose={() => setEdit(null)} />}
+      <Button className="lg:hidden" onClick={finance.logout}>
+        <LogOut size={16} /> Sair da conta
+      </Button>
     </div>
   )
 }

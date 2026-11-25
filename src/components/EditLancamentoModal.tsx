@@ -3,7 +3,7 @@ import { FastForward, HandCoins, Trash2, X } from 'lucide-react'
 import { AdiantarParcelas } from './AdiantarParcelas'
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { addMeses, faturaDaCompra, fmt, formaDe, mesCurto } from '../lib/finance'
+import { CUSTOS_CARRO, NAO_E_CARRO, addMeses, custoCarro, custoDeduzido, faturaDaCompra, fmt, formaDe, mesCurto } from '../lib/finance'
 import { chaveParcela, num } from '../lib/model'
 import type { Lancamento, Model } from '../lib/model'
 import type { Cell } from '../lib/google'
@@ -41,6 +41,7 @@ export function EditLancamentoModal({
     mes_ref: l.mes_ref,
     categoria: l.categoria,
     forma_pagamento: l.forma_pagamento,
+    carro: l.carro,
   })
   const [escopo, setEscopo] = useState<'esta' | 'proximas' | 'todas'>('esta')
   const [err, setErr] = useState<string | null>(null)
@@ -103,6 +104,7 @@ export function EditLancamentoModal({
       valor,
       categoria: f.categoria,
       forma_pagamento: f.forma_pagamento,
+      carro: f.carro,
     }
     const itens = emLote
       ? lote.map((x) => ({
@@ -218,6 +220,26 @@ export function EditLancamentoModal({
               />
             </Field>
           </Row>
+          {custoCarro({ ...f, carro: '' }) || f.carro ? (
+            <Field label="Gasto do carro">
+              <Dropdown
+                value={f.carro}
+                onChange={set('carro')}
+                opcoes={[
+                  custoCarro({ ...f, carro: '' })
+                    ? { value: '', label: `Automático (${custoDeduzido(f)})` }
+                    : { value: '', label: 'Não é do carro' },
+                  ...CUSTOS_CARRO.map((c) => ({ value: c, label: c })),
+                  ...(custoCarro({ ...f, carro: '' }) ? [{ value: NAO_E_CARRO, label: 'Não é do carro' }] : []),
+                ]}
+              />
+            </Field>
+          ) : (
+            // gasto de outra categoria que também é do carro (ex.: peça comprada parcelada)
+            <button type="button" onClick={() => set('carro')(custoDeduzido(f))} className="self-start text-xs font-semibold text-primary hover:underline">
+              + Marcar como gasto do carro
+            </button>
+          )}
 
           {sugereFatura && (
             <div className="rounded-xl bg-soft px-3 py-2 text-xs text-muted">

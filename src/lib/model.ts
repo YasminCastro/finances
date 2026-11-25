@@ -54,6 +54,8 @@ export interface Lancamento {
   parcelamento_id: string
   /** série do fixo quando este lançamento é um ajuste "só neste mês" */
   fixo_id: string
+  /** tipo de custo do carro escolhido à mão (Combustível, Mecânico…); vazio = deduzido pela categoria e descrição */
+  carro: string
   row?: Row
   /** fixo calculado a partir do modelo (ainda não lançado na planilha) */
   projetado?: boolean
@@ -239,6 +241,21 @@ export interface Rodizio {
   row: Row
 }
 
+/** Troca ou manutenção feita no carro (aba carro_trocas). */
+export interface Troca {
+  id: string
+  data: string
+  item: string
+  categoria: string
+  observacao: string
+  km: number | null
+  proxima_data: string
+  proxima_km: number | null
+  custo: number
+  lancamento_id: string
+  row: Row
+}
+
 export interface Pagamento {
   id: string
   mes_ref: string
@@ -268,6 +285,7 @@ export interface Model {
   investimentos: Investimento[]
   receber: Receber[]
   rodizios: Rodizio[]
+  trocas: Troca[]
   formas: Forma[]
   /** sempre em ordem alfabética */
   categorias: Categoria[]
@@ -310,6 +328,7 @@ export function buildModel(db: DB): Model {
       parcelas_restantes: rest ? num(rest) : null,
       parcelamento_id: str(r.parcelamento_id),
       fixo_id: str(r.fixo_id),
+      carro: str(r.carro),
       row: r,
     }
   })
@@ -369,6 +388,22 @@ export function buildModel(db: DB): Model {
         fixo_id: str(r.fixo_id),
         row: r,
       })),
+    trocas: (t.carro_trocas ?? [])
+      .filter((r) => str(r.item))
+      .map((r) => ({
+        id: str(r.id),
+        data: normData(r.data),
+        item: str(r.item),
+        categoria: str(r.categoria) || 'Outros',
+        observacao: str(r.observacao),
+        km: str(r.km) ? num(r.km) : null,
+        proxima_data: normData(r.proxima_data),
+        proxima_km: str(r.proxima_km) ? num(r.proxima_km) : null,
+        custo: num(r.custo),
+        lancamento_id: str(r.lancamento_id),
+        row: r,
+      }))
+      .sort((a, b) => b.data.localeCompare(a.data)),
     formas: t.formas_pagamento
       .filter((r) => str(r.nome))
       .map((r) => ({

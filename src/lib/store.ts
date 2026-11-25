@@ -395,6 +395,30 @@ export function useFinance() {
           ])
         }),
 
+      // ----- carro -----
+
+      /**
+       * Cria (row ausente) ou edita uma troca/manutenção.
+       * Com `lancar`, cria também o gasto nos lançamentos e liga os dois.
+       */
+      salvarTroca: (row: Row | undefined, valores: Record<string, Cell>, lancar?: Record<string, Cell>) =>
+        run(async (t, d) => {
+          let lid = str(valores.lancamento_id)
+          if (lancar) {
+            lid = newId('L')
+            await appendRows(t, d, 'lancamentos', [{ id: lid, tipo: 'gasto', ...lancar }])
+          }
+          const v = { ...valores, lancamento_id: lid }
+          if (row) await updateRow(t, d, 'carro_trocas', row, v)
+          else await appendRows(t, d, 'carro_trocas', [{ id: newId('T'), ...v }])
+        }),
+
+      excluirTroca: (row: Row) => run((t, d) => deleteRows(t, d, 'carro_trocas', [row])),
+
+      /** Importa trocas coladas da planilha antiga. */
+      importarTrocas: (linhas: Record<string, Cell>[]) =>
+        run((t, d) => appendRows(t, d, 'carro_trocas', linhas.map((l, k) => ({ id: newId('T') + k, ...l })))),
+
       /** Renomeia uma pessoa em todas as cobranças (pendentes e recebidas) e nos rodízios. */
       renomearPessoa: (antigo: string, novo: string) =>
         run(async (t, d) => {

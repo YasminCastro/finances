@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
+import { Car, ChevronDown, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
@@ -14,14 +14,16 @@ import { Lancamentos } from './pages/Lancamentos'
 import { Parcelamentos } from './pages/Parcelamentos'
 import { Overview } from './pages/Overview'
 import { Receber } from './pages/Receber'
+import { Carro } from './pages/Carro'
 
-type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'config'
+type Page = 'overview' | 'lancamentos' | 'fixos' | 'parcelamentos' | 'receber' | 'carro' | 'config'
 const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
   { id: 'overview', label: 'Visão geral', icon: <LayoutDashboard size={18} /> },
   { id: 'lancamentos', label: 'Lançamentos', icon: <List size={18} /> },
   { id: 'fixos', label: 'Fixos', icon: <Repeat size={18} /> },
   { id: 'parcelamentos', label: 'Parcelas', icon: <Layers size={18} /> },
   { id: 'receber', label: 'A receber', icon: <HandCoins size={18} /> },
+  { id: 'carro', label: 'Carro', icon: <Car size={18} /> },
 ]
 const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
 
@@ -137,6 +139,8 @@ export default function App() {
           <Parcelamentos model={model} mes={mes} />
         ) : page === 'receber' ? (
           <Receber model={model} mes={mes} finance={finance} />
+        ) : page === 'carro' ? (
+          <Carro model={model} mes={mes} setMes={setMes} finance={finance} />
         ) : page === 'config' ? (
           <Config model={model} finance={finance} dark={dark} setDark={setDark} />
         ) : (
@@ -150,16 +154,12 @@ export default function App() {
           <button
             key={p.id}
             onClick={() => setPage(p.id)}
-            className={cx('flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-medium', page === p.id ? 'text-primary' : 'text-muted')}
+            className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium sm:text-[11px]', page === p.id ? 'text-primary' : 'text-muted')}
           >
             {p.icon}
             {p.label}
           </button>
         ))}
-        <button onClick={logout} className="flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium text-muted">
-          <LogOut size={18} />
-          Sair
-        </button>
       </nav>
 
       {add && model && <AddModal key={add} kind={add} setKind={setAdd} onClose={closeAdd} model={model} mes={mes} finance={finance} />}

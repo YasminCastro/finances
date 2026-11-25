@@ -123,6 +123,7 @@ export const TABS = [
   'pagamentos',
   'entradas_fixas',
   'ajustes',
+  'carro_trocas',
   'rodizios',
 ] as const
 export type Tab = (typeof TABS)[number]
@@ -132,13 +133,14 @@ const AUTO_CREATE: Partial<Record<Tab, string[]>> = {
   entradas_fixas: ['id', 'descricao', 'valor', 'ativo', 'mes_inicio', 'mes_fim', 'serie'],
   ajustes: ['chave', 'valor'],
   rodizios: ['id', 'nome', 'membros', 'eu', 'mes_inicio', 'valor', 'fixo_id'],
+  carro_trocas: ['id', 'data', 'item', 'categoria', 'observacao', 'km', 'proxima_data', 'proxima_km', 'custo', 'lancamento_id'],
 }
 
 /** Colunas que o app acrescenta no fim do cabeçalho se ainda não existirem. */
 const AUTO_COLUMNS: Partial<Record<Tab, string[]>> = {
   fixos: ['mes_inicio', 'mes_fim', 'serie', 'frequencia_meses', 'parcelas'],
   entradas_fixas: ['mes_inicio', 'mes_fim', 'serie'],
-  lancamentos: ['fixo_id'],
+  lancamentos: ['fixo_id', 'carro'],
   formas_pagamento: ['dias_fechamento', 'limite'],
   categorias: ['cor'],
   a_receber: ['origem', 'tipo', 'recebido_em', 'data'],
