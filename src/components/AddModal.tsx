@@ -200,7 +200,7 @@ export function AddModal({
         {dicaFatura}
         {semCartao && (
           <Field label="Data de pagamento (opcional)">
-            <DatePicker value={f.vencimento ?? ''} onChange={set('vencimento')} />
+            <DatePicker value={f.vencimento ?? ''} onChange={set('vencimento')} opcional />
           </Field>
         )}
         <CobrancaFields model={model} value={cobranca} onChange={setCobranca} total={valor} />

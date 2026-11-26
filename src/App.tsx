@@ -146,7 +146,7 @@ export default function App() {
         ) : page === 'overview' ? (
           <Overview model={model} mes={mes} finance={finance} />
         ) : page === 'dashboard' ? (
-          <Dashboard key={mes} model={model} mes={mes} />
+          <Dashboard model={model} mes={mes} setMes={setMes} />
         ) : page === 'fixos' ? (
           <Fixos model={model} mes={mes} finance={finance} />
         ) : page === 'parcelamentos' ? (

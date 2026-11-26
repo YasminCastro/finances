@@ -35,12 +35,19 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
   const [importar, setImportar] = useState(false)
   const variacao = (k: number) => (k > 0 && lista[k - 1].valor > 0 ? lista[k].valor / lista[k - 1].valor - 1 : null)
 
-  const primeiro = lista[0]
-  const atual = lista[lista.length - 1]
   const h = hoje()
+  // registros com data futura são aumentos já combinados ("a partir de ..."): o resumo usa só os que já começaram
+  const iniciados = lista.filter((s) => s.data <= h)
+  const primeiro = iniciados[0]
+  const atual = iniciados[iniciados.length - 1] ?? null
+  const proximo = lista.find((s) => s.data > h) ?? null
+  const kAtual = atual ? lista.indexOf(atual) : -1
+  const varAtual = kAtual > 0 ? variacao(kAtual) : null
+  const varProximo = proximo && atual && atual.valor > 0 ? proximo.valor / atual.valor - 1 : null
+  const temHistorico = iniciados.length > 1
   const anos = primeiro ? Math.max(dias(primeiro.data, h) / 365.25, 0) : 0
-  const crescimento = primeiro && atual ? atual.valor / primeiro.valor - 1 : 0
-  const anual = primeiro && anos >= 1 ? Math.pow(atual.valor / primeiro.valor, 1 / anos) - 1 : null
+  const crescimento = temHistorico ? atual!.valor / primeiro.valor - 1 : 0
+  const anual = temHistorico && anos >= 1 ? Math.pow(atual!.valor / primeiro.valor, 1 / anos) - 1 : null
 
   return (
     <div className="space-y-4 lg:space-y-5">
@@ -68,19 +75,31 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             <Card className="col-span-2 !p-4 lg:col-span-1">
               <div className="text-xs font-semibold text-muted">Salário atual</div>
-              <Money value={atual.valor} className="mt-1.5 text-3xl" />
-              <div className="mt-1 truncate text-xs text-muted">
-                {atual.cargo}
-                {atual.empresa && ` · ${atual.empresa}`}
-              </div>
+              {atual ? (
+                <>
+                  <Money value={atual.valor} className="mt-1.5 text-3xl" />
+                  <div className="mt-1 truncate text-xs text-muted">
+                    {atual.cargo}
+                    {atual.empresa && ` · ${atual.empresa}`}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-1.5 text-3xl font-bold text-faint">—</div>
+              )}
+              {proximo && (
+                <div className="mt-1 truncate text-xs text-muted">
+                  {atual ? 'Próximo' : 'Começa'}: <b className="text-ink">{brl(proximo.valor)}</b> a partir de {dataBR(proximo.data)}
+                  {varProximo !== null && <span className={varProximo >= 0 ? 'text-good' : 'text-bad'}> ({pctTxt(varProximo)})</span>}
+                </div>
+              )}
             </Card>
-            <Resumo label="Crescimento total" valor={lista.length > 1 ? pctTxt(crescimento) : '—'} detalhe={lista.length > 1 ? `${(atual.valor / primeiro.valor).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× desde ${mesAno(primeiro.data)}` : 'precisa de 2 registros'} bom={crescimento > 0} />
+            <Resumo label="Crescimento total" valor={temHistorico ? pctTxt(crescimento) : '—'} detalhe={temHistorico ? `${(atual!.valor / primeiro.valor).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× desde ${mesAno(primeiro.data)}` : 'precisa de 2 registros'} bom={crescimento > 0} />
             <Resumo label="Média por ano" valor={anual !== null ? pctTxt(anual) : '—'} detalhe={anual !== null ? 'crescimento composto' : 'menos de 1 ano de histórico'} bom={(anual ?? 0) > 0} />
             <Resumo
               label="Último aumento"
-              valor={lista.length > 1 && variacao(lista.length - 1) !== null ? pctTxt(variacao(lista.length - 1)!) : '—'}
-              detalhe={`em ${dataBR(atual.data)} · há ${duracao(atual.data, h)}`}
-              bom={(variacao(lista.length - 1) ?? 0) > 0}
+              valor={varAtual !== null ? pctTxt(varAtual) : '—'}
+              detalhe={atual ? `em ${dataBR(atual.data)} · há ${duracao(atual.data, h)}` : 'nenhum salário começou ainda'}
+              bom={(varAtual ?? 0) > 0}
             />
           </div>
 
@@ -120,7 +139,7 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
                     const k = lista.indexOf(s)
                     const v = variacao(k)
                     return (
-                      <tr key={s.id || s.data} className="group hover:bg-soft/60">
+                      <tr key={s.row._row} className="group hover:bg-soft/60">
                         <td className="px-2 py-2.5 whitespace-nowrap tabular-nums">{dataBR(s.data)}</td>
                         <td className="px-2 py-2.5 text-right font-semibold whitespace-nowrap tabular-nums">R$ {fmt(s.valor)}</td>
                         <td className="px-2 py-2.5">{s.empresa}</td>
@@ -275,7 +294,7 @@ function Grafico({ lista }: { lista: Salario[] }) {
             {/* pontos e valores */}
             {lista.map((s, k) => (
               <button
-                key={s.id || s.data}
+                key={s.row._row}
                 type="button"
                 onMouseEnter={() => setFoco(k)}
                 onMouseLeave={() => setFoco(null)}
@@ -342,8 +361,16 @@ function SalarioModal({ model, finance, item, onClose }: { model: Model; finance
   const set = (k: keyof typeof f) => (v: string) => setF((p) => ({ ...p, [k]: v }))
   useEsc(onClose)
 
+  // compara pelo id (estável); a linha da planilha muda se uma linha acima for excluída.
+  // Depois de recarregar, `item` não é mais o mesmo objeto da lista.
+  // Sem id (linha digitada à mão na planilha), compara pelo conteúdo: a data é única entre os salários.
+  const ehOItem = (s: Salario) => !!item && (item.id ? s.id === item.id : !s.id && s.data === item.data && s.valor === item.valor)
+  // linha atual do item na planilha (pode ter mudado desde que o modal abriu); some se o item foi alterado por fora
+  const linhaAtual = item ? model.salarios.find(ehOItem)?.row : undefined
+  const sumiu = !!item && !linhaAtual
+  const MSG_SUMIU = 'Este salário foi alterado ou excluído em outro lugar. Feche e abra de novo.'
   // salário anterior à data escolhida (sem contar o próprio item)
-  const anterior = model.salarios.filter((s) => s !== item && s.data < f.data).pop()
+  const anterior = model.salarios.filter((s) => !ehOItem(s) && s.data < f.data).pop()
   const valor = num(f.valor)
   const v = anterior && valor > 0 ? valor / anterior.valor - 1 : null
   const empresas = [...new Set(model.salarios.map((s) => s.empresa).filter(Boolean))]
@@ -355,8 +382,9 @@ function SalarioModal({ model, finance, item, onClose }: { model: Model; finance
     setErr(null)
     if (!f.data) return setErr('Escolha a data de início.')
     if (!(valor > 0)) return setErr('Informe o salário.')
-    if (model.salarios.some((s) => s !== item && s.data === f.data)) return setErr('Já existe um salário com essa data.')
-    const ok = await finance.actions.salvarSalario(item?.row, {
+    if (sumiu) return setErr(MSG_SUMIU)
+    if (model.salarios.some((s) => !ehOItem(s) && s.data === f.data)) return setErr('Já existe um salário com essa data.')
+    const ok = await finance.actions.salvarSalario(linhaAtual, {
       data_inicio: f.data,
       salario: valor,
       empresa: f.empresa.trim(),
@@ -368,8 +396,9 @@ function SalarioModal({ model, finance, item, onClose }: { model: Model; finance
 
   async function excluir() {
     if (!item) return
+    if (!linhaAtual) return setErr(MSG_SUMIU)
     if (!confirmar) return setConfirmar(true)
-    if (await finance.actions.excluirSalario(item.row)) onClose()
+    if (await finance.actions.excluirSalario(linhaAtual)) onClose()
   }
 
   return (
@@ -446,24 +475,56 @@ function SalarioModal({ model, finance, item, onClose }: { model: Model; finance
 // ---------- colar da planilha ----------
 
 /** Colunas: Data início, Salário, Empresa, Cargo, Motivo (a variação, se vier, é ignorada). */
+/** Valor colado: "R$ 1.100,00", "1100,00", "1.100" (milhar BR) ou "1,100.00" / "1100.00" (formato US).
+ *  "5,000" é ambíguo (R$ 5,00 no formato BR ou 5 mil no US): fica de fora para não importar o valor errado. */
+function lerValor(bruto: string) {
+  const t = bruto.replace(/[R$\s]/g, '')
+  if (/^\d{1,3}(,\d{3})+$/.test(t)) return 0
+  if (/^\d{1,3}(,\d{3})+\.\d{1,2}$/.test(t)) return Number(t.replace(/,/g, '')) || 0 // 1,100.00
+  if (/^\d+\.\d{1,2}$/.test(t)) return Number(t) || 0 // 1100.50
+  if (!t.includes(',') && /\.\d{3}$/.test(t)) return Number(t.replace(/\./g, '')) || 0 // 1.100
+  return num(t)
+}
+
+/** Data colada: aceita também dd/mm/aa. Até 10 anos à frente continua 20xx (aumento futuro: 27 → 2027);
+ *  depois disso vira 19xx (98 → 1998). */
+function lerDataColada(bruto: string) {
+  const s = bruto.trim()
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/)
+  if (!m) return normData(s)
+  const seculo = Number(m[3]) > Number(hoje().slice(2, 4)) + 10 ? '19' : '20'
+  return normData(`${m[1]}/${m[2]}/${seculo}${m[3]}`)
+}
+
+/** AAAA-MM-DD de um dia que existe (rejeita 31/02, mês 13...). */
+function dataValida(iso: string) {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return false
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])
+}
+
 function lerLinhas(txt: string) {
-  return txt
-    .split(/\r?\n/)
-    .map((l) => l.split('\t'))
-    .map((c) => {
-      const t = (c[1] ?? '').replace(/[R$\s]/g, '')
-      const valor = !t.includes(',') && /\.\d{3}$/.test(t) ? Number(t.replace(/\./g, '')) || 0 : num(t)
-      return { data_inicio: normData((c[0] ?? '').trim()), salario: valor, empresa: (c[2] ?? '').trim(), cargo: (c[3] ?? '').trim(), motivo: (c[4] ?? '').trim() }
-    })
-    .filter((l) => /^\d{4}-\d{2}-\d{2}$/.test(l.data_inicio) && l.salario > 0)
+  const validas: { data_inicio: string; salario: number; empresa: string; cargo: string; motivo: string }[] = []
+  const rejeitadas: string[] = []
+  for (const linha of txt.split(/\r?\n/)) {
+    if (!linha.trim()) continue
+    const c = linha.split('\t')
+    const l = { data_inicio: lerDataColada(c[0] ?? ''), salario: lerValor(c[1] ?? ''), empresa: (c[2] ?? '').trim(), cargo: (c[3] ?? '').trim(), motivo: (c[4] ?? '').trim() }
+    if (dataValida(l.data_inicio) && l.salario > 0) validas.push(l)
+    else rejeitadas.push(linha)
+  }
+  return { validas, rejeitadas }
 }
 
 function ImportarModal({ model, finance, onClose }: { model: Model; finance: Finance; onClose: () => void }) {
   const [txt, setTxt] = useState('')
   useEsc(onClose)
   const existentes = new Set(model.salarios.map((s) => s.data))
-  const lidas = lerLinhas(txt)
-  const novas = lidas.filter((l) => !existentes.has(l.data_inicio))
+  const { validas: lidas, rejeitadas } = lerLinhas(txt)
+  // mesma data repetida no texto colado: vale a última linha (costuma ser a correção)
+  const porData = new Map(lidas.map((l) => [l.data_inicio, l]))
+  const novas = [...porData.values()].filter((l) => !existentes.has(l.data_inicio))
   const repetidas = lidas.length - novas.length
 
   async function salvar(e: FormEvent) {
@@ -496,9 +557,20 @@ function ImportarModal({ model, finance, onClose }: { model: Model; finance: Fin
             ))}
             {repetidas > 0 && (
               <div className="pt-1 text-muted">
-                {repetidas} {repetidas === 1 ? 'linha já existe (mesma data) e será ignorada' : 'linhas já existem (mesma data) e serão ignoradas'}.
+                {repetidas} {repetidas === 1 ? 'linha repete uma data (já cadastrada ou colada duas vezes) e será ignorada' : 'linhas repetem datas (já cadastradas ou coladas duas vezes) e serão ignoradas'}.
               </div>
             )}
+          </div>
+        )}
+        {lidas.length > 0 && rejeitadas.length > 0 && (
+          <div className="rounded-xl bg-soft px-3 py-2 text-xs text-bad">
+            {rejeitadas.length} {rejeitadas.length === 1 ? 'linha não foi reconhecida' : 'linhas não foram reconhecidas'} e {rejeitadas.length === 1 ? 'ficará' : 'ficarão'} de fora:
+            {rejeitadas.slice(0, 5).map((l, i) => (
+              <div key={i} className="truncate font-mono text-muted">
+                {l.replace(/\t/g, ' · ')}
+              </div>
+            ))}
+            {rejeitadas.length > 5 && <div className="text-muted">…e mais {rejeitadas.length - 5}</div>}
           </div>
         )}
         {txt.trim() && lidas.length === 0 && <p className="text-sm text-bad">Não reconheci nenhuma linha. A 1ª coluna precisa ser a data (dd/mm/aaaa) e a 2ª o salário.</p>}

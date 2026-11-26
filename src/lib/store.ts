@@ -159,7 +159,9 @@ export function useFinance() {
         run(async (t, d) => {
           const pid = newId('P')
           const valores = dividirParcelas(p.valor_total, p.total_parcelas)
-          await appendRows(t, d, 'parcelamentos', [{ id: pid, ...p, valor_parcela: valores[valores.length - 1], observacao: '' }])
+          // a cobrança não é coluna de parcelamentos: vira linhas em a_receber logo abaixo
+          const { cobranca: _cobranca, ...campos } = p
+          await appendRows(t, d, 'parcelamentos', [{ id: pid, ...campos, valor_parcela: valores[valores.length - 1], observacao: '' }])
           const linhas = valores.map((valor, k) => ({
             id: newId('L') + k,
             mes_ref: addMeses(p.mes_primeira_parcela, k),

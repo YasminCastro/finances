@@ -783,7 +783,7 @@ function TrocaModal({ model, troca, finance, onClose }: { model: Model; troca: T
           <div className="mb-2 text-xs font-semibold text-muted">Próxima troca (opcional)</div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <DatePicker value={f.proxima_data} onChange={set('proxima_data')} placeholder="Quando" />
+              <DatePicker value={f.proxima_data} onChange={set('proxima_data')} placeholder="Quando" opcional />
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {[
                   [6, '+6 meses'],
@@ -950,7 +950,7 @@ function ImportarModal({ model, finance, onClose }: { model: Model; finance: Fin
                 <span className="truncate">
                   <span className="text-faint tabular-nums">{anoCompleto(l.data)}</span> {l.item} <span className="text-muted">· {l.categoria}</span>
                 </span>
-                <span className="shrink-0 tabular-nums">{l.custo ? fmt(l.custo) : '–'}</span>
+                <span className="shrink-0 tabular-nums">{typeof l.custo === 'number' ? fmt(l.custo) : '–'}</span>
               </div>
             ))}
             {repetidas > 0 && (

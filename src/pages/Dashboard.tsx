@@ -49,9 +49,8 @@ interface DadosMes {
   saidas: number // filtradas
 }
 
-export function Dashboard({ model, mes }: { model: Model; mes: string }) {
+export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; mes: string; setMes: (m: string) => void }) {
   const [periodo, setPeriodo] = useState<Periodo>('12m')
-  const [ref, setRef] = useState(mes)
   const [f, setF] = useState<Filtros>({ categoria: '', forma: '', tipo: '' })
   const filtrando = !!(f.categoria || f.forma || f.tipo)
   const hojeMes = mesAtual()
@@ -217,7 +216,7 @@ export function Dashboard({ model, mes }: { model: Model; mes: string }) {
           onSelecionar={(c) => setF({ ...f, categoria: f.categoria === c ? '' : c })}
         />
         {meses.length > 1 && <MapaCategorias model={model} dados={atual} hojeMes={hojeMes} />}
-        <Reserva model={model} meses={mesesGrafico} hojeMes={hojeMes} />
+        <Reserva model={model} meses={mesesGrafico} selecionados={meses} hojeMes={hojeMes} />
         <Maiores itens={maiores} model={model} />
       </div>
     </div>
@@ -484,8 +483,9 @@ function MapaCategorias({ model, dados, hojeMes }: { model: Model; dados: DadosM
 }
 
 /** Reserva: quanto está guardado, como entrou e saiu no período e onde está. */
-function Reserva({ model, meses, hojeMes }: { model: Model; meses: string[]; hojeMes: string }) {
-  const ultimo = meses[meses.length - 1]
+/** `meses` são as barras (podem incluir contexto); os totais somam só os `selecionados`. */
+function Reserva({ model, meses, selecionados, hojeMes }: { model: Model; meses: string[]; selecionados: string[]; hojeMes: string }) {
+  const ultimo = selecionados[selecionados.length - 1]
   const { total, destinos } = investimentosResumo(model, ultimo)
   const porMes = meses.map((m) => {
     const xs = model.investimentos.filter((i) => i.mes_ref === m)
@@ -493,8 +493,9 @@ function Reserva({ model, meses, hojeMes }: { model: Model; meses: string[]; hoj
     const resgate = -xs.filter((i) => i.valor < 0).reduce((a, i) => a + i.valor, 0)
     return { mes: m, aporte, resgate, liquido: aporte - resgate }
   })
-  const aportes = porMes.reduce((a, p) => a + p.aporte, 0)
-  const resgates = porMes.reduce((a, p) => a + p.resgate, 0)
+  const doPeriodo = porMes.filter((p) => selecionados.includes(p.mes))
+  const aportes = doPeriodo.reduce((a, p) => a + p.aporte, 0)
+  const resgates = doPeriodo.reduce((a, p) => a + p.resgate, 0)
   const liquido = aportes - resgates
   // escala única para cima (aporte) e para baixo (resgate), com o zero no meio da proporção
   const maxCima = Math.max(...porMes.map((p) => p.aporte), 0)

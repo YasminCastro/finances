@@ -574,7 +574,7 @@ export function salarioFixo(model: Model, mes: string) {
 export function metaDoDestino(model: Model, destino: string, mes: string): number | null {
   const m = model.metas[destino]
   if (!m) return null
-  return m.meses ? m.meses * salarioFixo(model, mes) : m.valor
+  return m.meses !== undefined ? m.meses * salarioFixo(model, mes) : m.valor
 }
 
 /** Cores fixas por posição do destino na lista de Configurações (validadas para daltonismo, claro e escuro); "Outros" e excedentes ficam cinza. */

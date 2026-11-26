@@ -52,7 +52,18 @@ const erroCls = 'border-bad focus:border-bad focus:ring-bad/20'
  * Campo de data: dá para digitar (dd/mm/aaaa, as barras entram sozinhas; dd/mm usa o ano atual)
  * ou escolher no calendário.
  */
-export function DatePicker({ value, onChange, placeholder = 'dd/mm/aaaa' }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+export function DatePicker({
+  value,
+  onChange,
+  placeholder = 'dd/mm/aaaa',
+  opcional = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  /** campo pode ficar vazio: apagar o texto limpa a data */
+  opcional?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const [txt, setTxt] = useState(() => dataBR(value))
   const [erro, setErro] = useState(false)
@@ -79,7 +90,14 @@ export function DatePicker({ value, onChange, placeholder = 'dd/mm/aaaa' }: { va
     }
   }
   const confirmar = () => {
-    if (!txt.trim()) return setTxt(dataBR(value))
+    if (!txt.trim()) {
+      if (opcional) {
+        setUltimo('')
+        setTxt('')
+        if (value) onChange('')
+      } else setTxt(dataBR(value))
+      return
+    }
     const iso = lerData(txt)
     if (iso) {
       setUltimo(iso)
@@ -124,7 +142,13 @@ export function DatePicker({ value, onChange, placeholder = 'dd/mm/aaaa' }: { va
           selected={selected}
           defaultMonth={selected}
           onSelect={(d) => {
-            if (d) onChange(fromDate(d))
+            // clicar no dia já selecionado manda `undefined`: no campo opcional limpa a data,
+            // nos outros mantém o dia (e, nos dois casos, descarta o texto inválido digitado)
+            const iso = d ? fromDate(d) : opcional ? '' : value
+            setUltimo(iso)
+            setTxt(dataBR(iso))
+            setErro(false)
+            if (iso !== value) onChange(iso)
             setOpen(false)
           }}
         />
