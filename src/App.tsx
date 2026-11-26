@@ -49,7 +49,7 @@ function useTheme() {
 
 export default function App() {
   const finance = useFinance()
-  const { token, model, loading, busy, error, setError, login, logout, reload } = finance
+  const { token, model, loading, busy, error, setError, login, logout, reload, semAcesso, liberar } = finance
   const [dark, setDark] = useTheme()
   const [page, setPage] = useState<Page>('overview')
   const [mes, setMes] = useState(mesAtual)
@@ -59,6 +59,8 @@ export default function App() {
   const semMes = page === 'salarios'
 
   if (!token) return <Login onLogin={login} error={error} dark={dark} setDark={setDark} />
+  if (semAcesso && !model)
+    return <Liberar onLiberar={liberar} onSair={logout} error={error} dark={dark} setDark={setDark} />
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1500px] gap-5 p-3 sm:p-5">
@@ -313,6 +315,44 @@ function Login({
         </Button>
         {error && <p className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
         <p className="mt-6 text-xs text-faint">Seus dados ficam só na sua planilha do Google.</p>
+      </div>
+    </div>
+  )
+}
+
+/** Primeiro acesso (escopo drive.file): a usuária escolhe a planilha uma vez no seletor do Google. */
+function Liberar({
+  onLiberar,
+  onSair,
+  error,
+  dark,
+  setDark,
+}: {
+  onLiberar: () => void
+  onSair: () => void
+  error: string | null
+  dark: boolean
+  setDark: (d: boolean) => void
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle dark={dark} setDark={setDark} />
+      </div>
+      <div className="w-full max-w-sm rounded-3xl border border-line bg-card p-8 text-center shadow-sm">
+        <img src="/favicon.svg" alt="" className="mx-auto size-14 rounded-2xl" />
+        <h1 className="mt-5 text-2xl font-bold tracking-tight">Liberar a planilha</h1>
+        <p className="mt-2 text-sm text-muted">
+          Por segurança, o app só acessa a planilha que você escolher. Selecione <b>Finanças App - Dados</b> na
+          próxima janela. É preciso fazer isso só uma vez.
+        </p>
+        <Button variant="primary" onClick={onLiberar} className="mt-6 w-full py-3">
+          <GoogleIcon /> Escolher planilha
+        </Button>
+        {error && <p className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p>}
+        <button onClick={onSair} className="mt-4 text-xs text-faint hover:underline">
+          Sair
+        </button>
       </div>
     </div>
   )

@@ -3,6 +3,8 @@ import { addMeses, dividirParcelas, hoje } from './finance'
 import type { Conta } from './finance'
 import {
   AuthError,
+  SemAcessoError,
+  liberarPlanilha,
   appendRows,
   deleteRows,
   getStoredToken,
@@ -67,6 +69,8 @@ export function useFinance() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Logada, mas a planilha ainda não foi liberada para o app (escopo drive.file). */
+  const [semAcesso, setSemAcesso] = useState(false)
   const tokenRef = useRef(token)
 
   useEffect(() => {
@@ -78,6 +82,11 @@ export function useFinance() {
   }, [])
 
   const handle = useCallback((e: unknown) => {
+    if (e instanceof SemAcessoError) {
+      setSemAcesso(true)
+      setError(null)
+      return
+    }
     if (e instanceof AuthError) {
       setToken(null)
       setDb(null)
@@ -125,7 +134,21 @@ export function useFinance() {
     signOut(tokenRef.current)
     setToken(null)
     setDb(null)
+    setSemAcesso(false)
   }, [])
+
+  const liberar = useCallback(async () => {
+    const t = tokenRef.current
+    if (!t) return
+    setError(null)
+    try {
+      await liberarPlanilha(t)
+      setSemAcesso(false)
+      await reload()
+    } catch (e) {
+      handle(e)
+    }
+  }, [handle, reload])
 
   /** Executa uma escrita na planilha e recarrega tudo. */
   const run = useCallback(
@@ -501,7 +524,7 @@ export function useFinance() {
     [run, model],
   )
 
-  return { token, model, loading, busy, error, setError, login, logout, reload, actions }
+  return { token, model, loading, busy, error, setError, login, logout, reload, actions, semAcesso, liberar }
 }
 
 export type Finance = ReturnType<typeof useFinance>

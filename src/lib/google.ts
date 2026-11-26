@@ -6,8 +6,22 @@ import { corDaPosicao, ordemAlfabetica } from './cores'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 export const SPREADSHEET_ID = import.meta.env.VITE_SPREADSHEET_ID as string
 export const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit`
-const SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
+// Chave de API (pública) usada só pelo seletor de arquivos do Google (Picker).
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string
+// O Client ID começa com o número do projeto no Google Cloud, que o Picker usa como appId.
+const APP_ID = (CLIENT_ID ?? '').split('-')[0]
+// drive.file: o token só alcança arquivos que você liberou para o app (pelo seletor), e não todas as
+// suas planilhas. A liberação fica gravada na conta Google: é preciso escolher a planilha uma vez só.
+const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const TOKEN_KEY = 'financas.token'
+
+// O token fica no sessionStorage: vale só para esta aba e some ao fechá-la (no localStorage ele ficaria
+// disponível em todas as abas e sobreviveria ao fechar o navegador). Limpa o que versões antigas gravaram.
+try {
+  localStorage.removeItem(TOKEN_KEY)
+} catch {
+  /* armazenamento indisponível */
+}
 
 interface TokenResponse {
   access_token?: string
@@ -32,17 +46,39 @@ declare global {
           revoke: (token: string, done: () => void) => void
         }
       }
+      picker?: PickerNS
     }
+    gapi?: { load: (lib: string, cfg: { callback: () => void; onerror: () => void }) => void }
   }
 }
 
+interface PickerBuilder {
+  addView(v: unknown): PickerBuilder
+  setOAuthToken(t: string): PickerBuilder
+  setDeveloperKey(k: string): PickerBuilder
+  setAppId(id: string): PickerBuilder
+  setOrigin(o: string): PickerBuilder
+  setTitle(t: string): PickerBuilder
+  setCallback(cb: (d: { action: string; docs?: { id: string }[] }) => void): PickerBuilder
+  build(): { setVisible(v: boolean): void }
+}
+interface PickerNS {
+  PickerBuilder: new () => PickerBuilder
+  DocsView: new (viewId: unknown) => { setFileIds(ids: string): unknown; setMode(m: unknown): unknown }
+  ViewId: { SPREADSHEETS: unknown }
+  DocsViewMode: { LIST: unknown }
+  Action: { PICKED: string; CANCEL: string }
+}
+
 export class AuthError extends Error {}
+/** O app ainda não foi liberado para acessar a planilha (falta escolhê-la no seletor do Google). */
+export class SemAcessoError extends Error {}
 
 // ---------- token ----------
 
 export function getStoredToken(): string | null {
   try {
-    const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null') as { token: string; exp: number } | null
+    const s = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null') as { token: string; exp: number } | null
     if (s && s.exp > Date.now() + 60_000) return s.token
   } catch {
     /* armazenamento indisponível */
@@ -52,7 +88,7 @@ export function getStoredToken(): string | null {
 
 export function clearToken() {
   try {
-    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
   } catch {
     /* ignore */
   }
@@ -90,7 +126,7 @@ export async function signIn(): Promise<string> {
         }
         const exp = Date.now() + Number(r.expires_in ?? 3600) * 1000
         try {
-          localStorage.setItem(TOKEN_KEY, JSON.stringify({ token: r.access_token, exp }))
+          sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token: r.access_token, exp }))
         } catch {
           /* segue sem lembrar o login */
         }
@@ -106,6 +142,56 @@ export async function signIn(): Promise<string> {
 export function signOut(token: string | null) {
   if (token) window.google?.accounts.oauth2.revoke(token, () => {})
   clearToken()
+}
+
+// ---------- seletor de arquivos (liberar a planilha) ----------
+
+let pickerPromise: Promise<void> | null = null
+function loadPicker(): Promise<void> {
+  if (!pickerPromise) {
+    pickerPromise = new Promise((resolve, reject) => {
+      const falhou = () => {
+        pickerPromise = null
+        reject(new Error('Não foi possível abrir o seletor do Google. Verifique a internet.'))
+      }
+      const carregar = () => window.gapi!.load('picker', { callback: () => resolve(), onerror: falhou })
+      if (window.gapi) return carregar()
+      const s = document.createElement('script')
+      s.src = 'https://apis.google.com/js/api.js'
+      s.async = true
+      s.onload = carregar
+      s.onerror = falhou
+      document.head.appendChild(s)
+    })
+  }
+  return pickerPromise
+}
+
+/** Abre o seletor do Google já filtrado na planilha do app. Escolhida uma vez, o acesso fica liberado. */
+export async function liberarPlanilha(token: string): Promise<void> {
+  if (!API_KEY) throw new Error('Falta configurar VITE_GOOGLE_API_KEY.')
+  await loadPicker()
+  const p = window.google!.picker!
+  const view = new p.DocsView(p.ViewId.SPREADSHEETS)
+  view.setFileIds(SPREADSHEET_ID)
+  view.setMode(p.DocsViewMode.LIST)
+  return new Promise((resolve, reject) => {
+    new p.PickerBuilder()
+      .addView(view)
+      .setOAuthToken(token)
+      .setDeveloperKey(API_KEY)
+      .setAppId(APP_ID)
+      .setOrigin(window.location.origin)
+      .setTitle('Selecione a planilha de finanças')
+      .setCallback((d) => {
+        if (d.action === p.Action.PICKED) {
+          if (d.docs?.some((doc) => doc.id === SPREADSHEET_ID)) resolve()
+          else reject(new Error('Essa não é a planilha do app. Escolha "Finanças App - Dados".'))
+        } else if (d.action === p.Action.CANCEL) reject(new Error('Seleção cancelada.'))
+      })
+      .build()
+      .setVisible(true)
+  })
 }
 
 // ---------- Sheets API ----------
@@ -168,11 +254,17 @@ async function api<T = unknown>(token: string, path: string, init?: RequestInit)
   }
   if (!r.ok) {
     let msg = ''
+    let status = ''
     try {
-      msg = ((await r.json()) as { error?: { message?: string } }).error?.message ?? ''
+      const e = ((await r.json()) as { error?: { message?: string; status?: string } }).error
+      msg = e?.message ?? ''
+      status = e?.status ?? ''
     } catch {
       /* corpo não é JSON */
     }
+    // Com drive.file, planilha não liberada responde 404 (ou 403 sem permissão).
+    if (r.status === 404 || (r.status === 403 && status === 'PERMISSION_DENIED'))
+      throw new SemAcessoError('Falta liberar o acesso do app à sua planilha.')
     if (r.status === 403) msg = `Sem permissão na planilha. ${msg}`
     throw new Error(`Google Sheets (${r.status}): ${msg || r.statusText}`)
   }
