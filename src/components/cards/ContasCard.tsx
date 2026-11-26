@@ -62,7 +62,7 @@ export function ContasCard({
       )}
 
       {dias.length > 1 && (
-        <div className="scroll-thin mt-4 flex gap-1.5 overflow-x-auto pb-1 text-xs" role="group" aria-label="Filtrar por vencimento">
+        <div className="scroll-thin -mx-4 mt-4 flex gap-1.5 overflow-x-auto px-4 pb-1 text-xs sm:mx-0 sm:px-0" role="group" aria-label="Filtrar por vencimento">
           <Filtro ativo={dia === null} onClick={() => setDia(null)}>
             Todas
           </Filtro>
@@ -78,7 +78,7 @@ export function ContasCard({
         </div>
       )}
 
-      <ul className="scroll-thin mt-2 max-h-80 divide-y divide-line overflow-y-auto pr-1">
+      <ul className="scroll-thin mt-2 divide-y divide-line lg:max-h-80 lg:overflow-y-auto lg:pr-1">
         {visiveis.length === 0 && <Empty>Nada para pagar neste mês.</Empty>}
         {visiveis.map((c) => {
           const pago = !!c.pagamento
@@ -93,7 +93,7 @@ export function ContasCard({
                 aria-label={pago ? `Desmarcar ${c.titulo}` : `Marcar ${c.titulo} como pago`}
                 aria-pressed={pago}
                 className={cx(
-                  'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition',
+                  'relative flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition after:absolute after:-inset-2.5',
                   pago ? 'border-good bg-good text-white' : 'border-line hover:border-primary',
                 )}
               >
@@ -133,7 +133,7 @@ function Filtro({ ativo, onClick, children }: { ativo: boolean; onClick: () => v
       onClick={onClick}
       aria-pressed={ativo}
       className={cx(
-        'shrink-0 rounded-full px-2.5 py-1 font-semibold whitespace-nowrap tabular-nums transition-colors',
+        'shrink-0 rounded-full px-3 py-1.5 font-semibold whitespace-nowrap tabular-nums transition-colors sm:px-2.5 sm:py-1',
         ativo ? 'bg-primary-soft text-primary' : 'bg-soft text-muted hover:text-ink',
       )}
     >

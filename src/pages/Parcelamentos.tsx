@@ -92,13 +92,13 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
     <div className="space-y-4 lg:space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5">
         <Resumo icon={<Wallet size={16} />} titulo={`Parcelas de ${mesCurto(mes)}`}>
-          <Money value={totais[0]} className="text-2xl sm:text-3xl" />
+          <Money value={totais[0]} className="text-[22px] sm:text-3xl" />
         </Resumo>
         <Resumo icon={<Layers size={16} />} titulo="Próximos 12 meses">
-          <Money value={totalJanela} className="text-2xl sm:text-3xl" />
+          <Money value={totalJanela} className="text-[22px] sm:text-3xl" />
         </Resumo>
         <Resumo icon={<TrendingDown size={16} />} titulo="Total que falta pagar">
-          <Money value={totalRestante} className="text-2xl sm:text-3xl" />
+          <Money value={totalRestante} className="text-[22px] sm:text-3xl" />
         </Resumo>
         <Resumo icon={<CalendarCheck size={16} />} titulo="Livre de parcelas em">
           <div className="text-2xl font-extrabold tracking-tight sm:text-3xl">{ultimoMes ? mesCurto(addMeses(ultimoMes, 1)) : '—'}</div>
@@ -110,7 +110,7 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
       </div>
 
       <Card className="overflow-hidden p-0 sm:p-0">
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <h2 className="text-[15px] font-semibold text-ink">Parcelas por mês</h2>
             <p className="mt-0.5 text-xs text-muted">
@@ -131,7 +131,7 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
             <table className="w-full border-separate border-spacing-0 text-sm">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-20 w-56 min-w-56 border-r border-b border-line bg-card px-4 py-3 text-left align-bottom">
+                  <th className="sticky left-0 z-20 w-36 max-w-36 min-w-36 border-r border-b border-line bg-card px-3 py-3 text-left align-bottom sm:w-56 sm:max-w-none sm:min-w-56 sm:px-4">
                     <div className="text-xs font-medium text-muted">Compra</div>
                     <div className="mt-1 text-[11px] font-normal text-faint">total por mês →</div>
                   </th>
@@ -139,7 +139,7 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
                     const v = totais[k]
                     const atual = k === 0
                     return (
-                      <th key={m} className="min-w-22 border-b border-line px-1 pt-3 align-bottom font-normal">
+                      <th key={m} className="min-w-20 border-b border-line px-1 pt-3 align-bottom font-normal sm:min-w-22">
                         <div className="flex flex-col items-center gap-1">
                           <span
                             className={cx(
@@ -163,7 +163,7 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
                       </th>
                     )
                   })}
-                  <th className="sticky right-0 z-20 border-b border-l border-line bg-card px-4 py-3 text-right align-bottom whitespace-nowrap">
+                  <th className="right-0 z-20 border-b border-l border-line bg-card px-3 py-3 text-right align-bottom whitespace-nowrap sm:sticky sm:px-4">
                     <div className="text-xs font-medium text-muted">Falta</div>
                     <div className="mt-1 text-sm font-bold text-ink tabular-nums">{fmt(totalRestante)}</div>
                   </th>
@@ -185,8 +185,8 @@ export function Parcelamentos({ model, mes }: { model: Model; mes: string }) {
 function Resumo({ icon, titulo, children }: { icon: ReactNode; titulo: string; children: ReactNode }) {
   return (
     <Card className="p-4 sm:p-5">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-soft">{icon}</span>
+      <div className="mb-2 flex items-center gap-2 text-xs leading-tight font-medium text-muted">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-soft">{icon}</span>
         {titulo}
       </div>
       {children}
@@ -200,7 +200,7 @@ function Linha({ compra: c, cor, meses }: { compra: Compra; cor: string; meses: 
   const faixa = `color-mix(in srgb, ${base} 16%, transparent)`
   return (
     <tr className="group">
-      <td className="sticky left-0 z-10 border-r border-b border-line bg-card px-4 py-2.5 transition-colors group-hover:bg-soft">
+      <td className="sticky left-0 z-10 w-36 max-w-36 border-r border-b border-line bg-card px-3 py-2.5 transition-colors group-hover:bg-soft sm:w-auto sm:max-w-none sm:px-4">
         <div className="truncate font-medium text-ink" title={c.descricao}>
           {c.descricao}
         </div>
@@ -234,7 +234,7 @@ function Linha({ compra: c, cor, meses }: { compra: Compra; cor: string; meses: 
           </td>
         )
       })}
-      <td className="sticky right-0 z-10 border-b border-l border-line bg-card px-4 py-2.5 text-right whitespace-nowrap transition-colors group-hover:bg-soft">
+      <td className="right-0 z-10 border-b border-l border-line bg-card px-3 py-2.5 text-right whitespace-nowrap transition-colors group-hover:bg-soft sm:sticky sm:px-4">
         <div className="font-semibold text-ink tabular-nums">{fmt(c.restante)}</div>
         <div className="mt-0.5 text-xs text-muted">
           {c.faltam === 1 ? 'última' : `${c.faltam}x`} · até {mesCurto(c.fim)}

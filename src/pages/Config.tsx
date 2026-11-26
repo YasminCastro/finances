@@ -535,7 +535,7 @@ function ConfigModal({
       <form
         onSubmit={salvar}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold">{TITULOS[edit.tab][r ? 1 : 0]}</h2>
@@ -691,7 +691,7 @@ function ConfigModal({
         </div>
 
         {(err || finance.error) && <div className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{err || finance.error}</div>}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="sheet-footer mt-6 flex justify-end gap-2">
           <Button onClick={onClose}>Cancelar</Button>
           <Button type="submit" variant="primary" disabled={finance.busy}>
             {finance.busy ? 'Salvando…' : 'Salvar'}

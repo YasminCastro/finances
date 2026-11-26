@@ -125,7 +125,7 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
                   : undefined
               }
               className={cx(
-                'rounded-3xl border p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition sm:p-5',
+                'flex min-w-0 flex-col justify-start rounded-3xl border p-3.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition active:scale-[0.98] sm:p-5',
                 acima ? 'bg-bad-soft' : 'bg-card',
                 ativo
                   ? acima
@@ -143,7 +143,7 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
                 </span>
                 <span className="rounded-full bg-soft px-2 py-0.5 text-[11px] text-muted tabular-nums">{t.qtd}</span>
               </div>
-              <Money value={t.total} className={cx('text-xl sm:text-2xl', acima && 'text-bad')} />
+              <Money value={t.total} className={cx('text-[19px] sm:text-2xl', acima && 'text-bad')} />
               {al && (
                 <div className="mt-2.5">
                   <div className="relative h-1.5 overflow-hidden rounded-full bg-soft">
@@ -252,13 +252,13 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
             {dias.map((d) => (
               <section key={d.chave} aria-label={d.titulo}>
                 <div className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-1.5 sm:px-5">
-                  <h3 className="text-xs font-semibold text-ink">
+                  <h3 className="min-w-0 truncate text-xs font-semibold text-ink first-letter:uppercase">
                     {d.titulo}
                     <span className="ml-1.5 font-normal text-faint">
                       {d.itens.length} {d.itens.length === 1 ? 'item' : 'itens'}
                     </span>
                   </h3>
-                  <span className="text-xs font-medium text-muted tabular-nums">R$ {fmt(d.total)}</span>
+                  <span className="shrink-0 text-xs font-medium whitespace-nowrap text-muted tabular-nums">R$ {fmt(d.total)}</span>
                 </div>
                 <ul>
                   {d.itens.map((l, idx) => (

@@ -96,6 +96,7 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
             <Resumo label="Crescimento total" valor={temHistorico ? pctTxt(crescimento) : '—'} detalhe={temHistorico ? `${(atual!.valor / primeiro.valor).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× desde ${mesAno(primeiro.data)}` : 'precisa de 2 registros'} bom={crescimento > 0} />
             <Resumo label="Média por ano" valor={anual !== null ? pctTxt(anual) : '—'} detalhe={anual !== null ? 'crescimento composto' : 'menos de 1 ano de histórico'} bom={(anual ?? 0) > 0} />
             <Resumo
+              className="col-span-2 lg:col-span-1"
               label="Último aumento"
               valor={varAtual !== null ? pctTxt(varAtual) : '—'}
               detalhe={atual ? `em ${dataBR(atual.data)} · há ${duracao(atual.data, h)}` : 'nenhum salário começou ainda'}
@@ -121,7 +122,37 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
             >
               Histórico
             </CardTitle>
-            <div className="-mx-2 overflow-x-auto">
+            {/* celular: lista; a partir do sm: tabela */}
+            <ul className="-mx-1 divide-y divide-line sm:hidden">
+              {[...lista].reverse().map((s) => {
+                const v = variacao(lista.indexOf(s))
+                return (
+                  <li key={s.row._row}>
+                    <button
+                      type="button"
+                      onClick={() => setEdit(s)}
+                      aria-label={`Editar salário de ${dataBR(s.data)}`}
+                      className="flex w-full items-start gap-3 rounded-xl px-1 py-3 text-left active:bg-soft"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{s.cargo || s.empresa || 'Salário'}</span>
+                        <span className="mt-0.5 block truncate text-xs text-muted">
+                          {[s.cargo && s.empresa, s.motivo].filter(Boolean).join(' · ') || '—'}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-faint tabular-nums">desde {dataBR(s.data)}</span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="text-sm font-bold whitespace-nowrap tabular-nums">R$ {fmt(s.valor)}</span>
+                        {v !== null && (
+                          <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums', v >= 0 ? 'bg-good-soft text-good' : 'bg-bad-soft text-bad')}>{pctTxt(v)}</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="-mx-2 hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-muted">
@@ -180,9 +211,9 @@ export function Salarios({ model, finance }: { model: Model; finance: Finance })
   )
 }
 
-function Resumo({ label, valor, detalhe, bom }: { label: string; valor: string; detalhe: string; bom: boolean }) {
+function Resumo({ label, valor, detalhe, bom, className }: { label: string; valor: string; detalhe: string; bom: boolean; className?: string }) {
   return (
-    <Card className="!p-4">
+    <Card className={cx('!p-4', className)}>
       <div className="text-xs font-semibold text-muted">{label}</div>
       <div className={cx('mt-1.5 text-2xl font-bold tabular-nums', valor !== '—' && (bom ? 'text-good' : 'text-bad'))}>{valor}</div>
       <div className="mt-1 text-xs text-muted">{detalhe}</div>
@@ -260,7 +291,7 @@ function Grafico({ lista }: { lista: Salario[] }) {
   const sel = foco !== null ? lista[foco] : null
   return (
     <Card>
-      <CardTitle extra={<span className="text-xs text-muted">faixas = empresas · passe o mouse nos pontos</span>}>Evolução salarial</CardTitle>
+      <CardTitle extra={<span className="text-xs text-muted">faixas = empresas · toque nos pontos</span>}>Evolução salarial</CardTitle>
       <div className="flex gap-2">
         {/* eixo y */}
         <div className="relative w-14 shrink-0 text-right text-[10px] text-muted tabular-nums" style={{ height: 260 }}>
@@ -450,7 +481,7 @@ function SalarioModal({ model, finance, item, onClose }: { model: Model; finance
         </div>
 
         {err && <p className="text-sm font-semibold text-bad">{err}</p>}
-        <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="sheet-footer flex items-center justify-between gap-2 pt-1">
           {item ? (
             <Button variant={confirmar ? 'danger' : 'ghost'} onClick={() => void excluir()} disabled={finance.busy}>
               {confirmar ? 'Confirmar exclusão' : 'Excluir'}
@@ -574,7 +605,7 @@ function ImportarModal({ model, finance, onClose }: { model: Model; finance: Fin
           </div>
         )}
         {txt.trim() && lidas.length === 0 && <p className="text-sm text-bad">Não reconheci nenhuma linha. A 1ª coluna precisa ser a data (dd/mm/aaaa) e a 2ª o salário.</p>}
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="sheet-footer flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
@@ -603,7 +634,7 @@ function Modal({ titulo, children, onClose, onSubmit }: { titulo: string; childr
       <form
         onSubmit={onSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{titulo}</h2>

@@ -391,7 +391,7 @@ export function AddModal({
       <form
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">Adicionar</h2>
@@ -399,7 +399,7 @@ export function AddModal({
             <X size={18} />
           </button>
         </div>
-        <div className="scroll-thin -mx-1 mb-5 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        <div className="scroll-thin -mx-5 mb-5 flex gap-1.5 overflow-x-auto px-5 pb-1 sm:-mx-1 sm:px-1">
           {ADD_KINDS.map((k) => (
             <button
               type="button"
@@ -430,7 +430,7 @@ export function AddModal({
           {campos}
         </div>
         {(err || finance.error) && <div className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{err || finance.error}</div>}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="sheet-footer mt-6 flex justify-end gap-2">
           <Button onClick={onClose}>Cancelar</Button>
           <Button type="submit" variant="primary" disabled={finance.busy}>
             {finance.busy ? 'Salvando…' : 'Salvar'}

@@ -136,7 +136,7 @@ export function AdiantarParcelas({
       )}
 
       {(err || finance.error) && <div className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{err || finance.error}</div>}
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="sheet-footer mt-6 flex justify-end gap-2">
         <Button onClick={onVoltar}>Voltar</Button>
         {max > 0 && (
           <Button type="submit" variant="primary" disabled={finance.busy}>

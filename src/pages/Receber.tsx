@@ -44,11 +44,13 @@ export function Receber({ model, mes, finance }: { model: Model; mes: string; fi
     .sort((a, b) => (b.recebido_em || b.mes_ref).localeCompare(a.recebido_em || a.mes_ref))
     .slice(0, 30)
 
+  const nPessoas = new Set(pendentes.map((r) => r.pessoa)).size
+
   return (
     <div className="space-y-4 lg:space-y-5">
       {/* resumo */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-5">
-        <Resumo titulo="Te devem no total" valor={somar(pendentes)} detalhe={`${new Set(pendentes.map((r) => r.pessoa)).size} pessoas`} tom="primary" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 [&>:first-child]:col-span-2 sm:[&>:first-child]:col-span-1">
+        <Resumo titulo="Te devem no total" valor={somar(pendentes)} detalhe={`${nPessoas} ${nPessoas === 1 ? 'pessoa' : 'pessoas'}`} tom="primary" />
         <Resumo titulo={`A receber de ${mesCurto(mes)}`} valor={somar(doMes)} detalhe={`${doMes.length} ${doMes.length === 1 ? 'item' : 'itens'}`} />
         <Resumo titulo={`Recebido em ${mesCurto(mes)}`} valor={somar(recebidosMes)} detalhe={`${recebidosMes.length} ${recebidosMes.length === 1 ? 'item' : 'itens'}`} tom="good" />
       </div>
@@ -190,7 +192,7 @@ export function Receber({ model, mes, finance }: { model: Model; mes: string; fi
 function Resumo({ titulo, valor, detalhe, tom }: { titulo: string; valor: number; detalhe: string; tom?: 'primary' | 'good' }) {
   return (
     <div className="rounded-3xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
-      <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-medium text-muted">
         <span>{titulo}</span>
         <span className="rounded-full bg-soft px-2 py-0.5 text-[11px] tabular-nums">{detalhe}</span>
       </div>
@@ -493,7 +495,7 @@ function RodizioModal({ alvo, model, mes, finance, onClose }: { alvo: Rodizio | 
           </div>
         </div>
       ) : (
-        <div className="mt-6 flex items-center justify-between gap-2">
+        <div className="sheet-footer mt-6 flex items-center justify-between gap-2">
           <div>
             {r && (
               <Button variant="ghost" className="text-bad hover:bg-bad-soft hover:text-bad" onClick={() => setApagar(true)}>
@@ -617,9 +619,10 @@ function Pessoa({
 
   return (
     <section className="rounded-2xl border border-line">
-      <div className="flex items-center gap-3 p-3">
+      {/* No celular: nome e total na 1ª linha, ações na 2ª (largura toda); a partir do sm, tudo numa linha */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 p-3">
         {editando ? (
-          <form onSubmit={renomear} className="flex min-w-0 flex-1 items-center gap-2">
+          <form onSubmit={renomear} className="flex min-w-0 flex-1 basis-full items-center gap-2 sm:basis-0">
             <Avatar nome={nome || pessoa} />
             <input
               autoFocus
@@ -641,7 +644,7 @@ function Pessoa({
             <button type="button" onClick={() => setAberto(!aberto)} aria-expanded={aberto} className="flex min-w-0 flex-1 items-center gap-3 text-left">
               <Avatar nome={pessoa} />
               <span className="min-w-0">
-                <span className="block truncate font-semibold">{pessoa}</span>
+                <span className="line-clamp-2 block leading-snug font-semibold [overflow-wrap:anywhere] sm:line-clamp-none sm:truncate">{pessoa}</span>
                 <span className="text-xs text-muted">
                   {itens.length} {itens.length === 1 ? 'item' : 'itens'}
                   {atrasados > 0 && <span className="text-warn"> · {atrasados} de meses anteriores</span>}
@@ -653,21 +656,27 @@ function Pessoa({
               onClick={() => setEditando(true)}
               title="Editar nome"
               aria-label={`Editar nome de ${pessoa}`}
-              className="rounded-lg p-1.5 text-faint hover:bg-soft hover:text-ink"
+              className="-ml-1.5 shrink-0 rounded-lg p-2 text-faint hover:bg-soft hover:text-ink sm:p-1.5"
             >
               <Pencil size={14} />
             </button>
+            <span className="ml-auto shrink-0 text-base font-bold tabular-nums">R$ {fmt(total)}</span>
           </>
         )}
-        <span className="text-right">
-          <span className="block text-base font-bold tabular-nums">R$ {fmt(total)}</span>
-        </span>
-        <Button variant="ghost" disabled={finance.busy} onClick={onAbater} title={`Algo que ${pessoa} pagou para você: abate do que ela te deve`}>
-          <MinusCircle size={15} /> <span className="hidden sm:inline">Abater</span>
-        </Button>
-        <Button disabled={finance.busy} onClick={() => finance.actions.marcarRecebidos(itens)} title={`Marcar tudo de ${pessoa} como recebido`}>
-          <Check size={15} /> <span className="hidden sm:inline">Recebi tudo</span>
-        </Button>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Button
+            variant="ghost"
+            className="flex-1 bg-soft sm:flex-none sm:bg-transparent"
+            disabled={finance.busy}
+            onClick={onAbater}
+            title={`Algo que ${pessoa} pagou para você: abate do que ela te deve`}
+          >
+            <MinusCircle size={15} /> Abater
+          </Button>
+          <Button className="flex-1 sm:flex-none" disabled={finance.busy} onClick={() => finance.actions.marcarRecebidos(itens)} title={`Marcar tudo de ${pessoa} como recebido`}>
+            <Check size={15} /> Recebi tudo
+          </Button>
+        </div>
       </div>
 
       {aberto && (
@@ -898,7 +907,7 @@ function NovaCobranca({
         </p>
       </div>
       {(err || finance.error) && <div className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{err || finance.error}</div>}
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="sheet-footer mt-6 flex justify-end gap-2">
         <Button onClick={onClose}>Cancelar</Button>
         <Button type="submit" variant="primary" disabled={finance.busy}>
           {finance.busy ? 'Salvando…' : 'Salvar'}
@@ -916,7 +925,7 @@ function Modal({ titulo, children, onClose, onSubmit }: { titulo: string; childr
       <form
         onSubmit={onSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{titulo}</h2>

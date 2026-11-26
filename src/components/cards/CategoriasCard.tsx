@@ -74,7 +74,7 @@ export function CategoriasCard({ cats }: { cats: CategoriaResumo[] }) {
         </div>
       )}
 
-      <ul className="scroll-thin mt-3 max-h-[22rem] space-y-3.5 overflow-y-auto pr-2">
+      <ul className="scroll-thin mt-3 space-y-3.5 lg:max-h-88 lg:overflow-y-auto lg:pr-2">
         {cats.length === 0 && <Empty>Sem gastos neste mês.</Empty>}
         {lista.map((c) => {
           const temMeta = c.orcamento > 0

@@ -1,4 +1,4 @@
-import { BarChart3, Car, TrendingUp, ChevronDown, PiggyBank, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
+import { BarChart3, Car, TrendingUp, ChevronDown, PiggyBank, ChevronLeft, ChevronRight, HandCoins, Layers, LayoutDashboard, LayoutGrid, List, LoaderCircle, LogOut, Moon, Plus, RefreshCw, Repeat, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AddModal } from './components/AddModal'
@@ -7,6 +7,7 @@ import type { AddKind } from './components/addKinds'
 import { Button, cx } from './components/kit'
 import { addMeses, mesAtual, nomeMes } from './lib/finance'
 import { useFinance } from './lib/store'
+import { escFecha } from './lib/utils'
 import { MonthPicker } from './components/pickers'
 import { Config } from './pages/Config'
 import { Fixos } from './pages/Fixos'
@@ -32,12 +33,21 @@ const PAGES: { id: Page; label: string; curto?: string; icon: ReactNode }[] = [
   { id: 'salarios', label: 'Salários', icon: <TrendingUp size={18} /> },
 ]
 const AJUSTES: { id: Page; label: string; icon: ReactNode }[] = [{ id: 'config', label: 'Configurações', icon: <Settings size={18} /> }]
+const TODAS = [...PAGES, ...AJUSTES]
+/** Celular: as abas fixas da barra inferior; o resto fica no "Mais". */
+const PRINCIPAIS: { id: Page; label: string }[] = [
+  { id: 'overview', label: 'Início' },
+  { id: 'lancamentos', label: 'Lançamentos' },
+  { id: 'dashboard', label: 'Painel' },
+]
+const NO_MAIS = TODAS.filter((p) => !PRINCIPAIS.some((x) => x.id === p.id))
 
 function useTheme() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const set = (d: boolean) => {
     setDark(d)
     document.documentElement.classList.toggle('dark', d)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', d ? '#0b1120' : '#eef2f9')
     try {
       localStorage.setItem('financas.theme', d ? 'dark' : 'light')
     } catch {
@@ -54,7 +64,14 @@ export default function App() {
   const [page, setPage] = useState<Page>('overview')
   const [mes, setMes] = useState(mesAtual)
   const [add, setAdd] = useState<AddKind | null>(null)
+  const [mais, setMais] = useState(false)
   const closeAdd = useCallback(() => setAdd(null), [])
+  const closeMais = useCallback(() => setMais(false), [])
+  const irPara = (p: Page) => {
+    setPage(p)
+    setMais(false)
+    window.scrollTo({ top: 0 })
+  }
   // páginas que não dependem do mês (ex.: Salários) não mostram o seletor de mês nem o Adicionar das finanças
   const semMes = page === 'salarios'
 
@@ -63,7 +80,7 @@ export default function App() {
     return <Liberar onLiberar={liberar} onSair={logout} error={error} dark={dark} setDark={setDark} />
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1500px] gap-5 p-3 sm:p-5">
+    <div className="mx-auto flex min-h-screen max-w-[1500px] gap-5 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5">
       {/* Sidebar (desktop) */}
       <aside className="sticky top-5 hidden h-[calc(100vh-2.5rem)] w-60 shrink-0 flex-col rounded-3xl border border-line bg-card p-4 lg:flex">
         <Brand />
@@ -95,22 +112,22 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 pb-24 lg:pb-0">
-        {/* Header */}
-        <header className="mb-4 flex items-center gap-2 rounded-3xl border border-line bg-card px-3 py-3 sm:px-5 lg:mb-5">
-          <div className="lg:hidden">
+      <main className="min-w-0 flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        {/* Header (no celular fica grudado no topo ao rolar) */}
+        <header className="sticky top-[max(0.5rem,env(safe-area-inset-top))] z-30 before:absolute before:inset-x-0 before:bottom-full before:h-[calc(env(safe-area-inset-top)+0.75rem)] before:bg-page lg:before:hidden mb-3 flex items-center gap-1 rounded-3xl border border-line bg-card/95 px-2 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur sm:gap-2 sm:px-5 sm:py-3 lg:static lg:mb-5 lg:bg-card lg:backdrop-blur-none">
+          <div className="hidden sm:block lg:hidden">
             <Brand compact />
           </div>
           {semMes ? (
-            <h1 className="min-w-0 flex-1 truncate px-1.5 text-lg font-bold tracking-tight sm:text-2xl">{PAGES.find((p) => p.id === page)?.label}</h1>
+            <h1 className="min-w-0 flex-1 truncate px-2 text-lg font-bold tracking-tight sm:text-2xl">{TODAS.find((p) => p.id === page)?.label}</h1>
           ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-2">
             <IconBtn label="Mês anterior" onClick={() => setMes(addMeses(mes, -1))}>
               <ChevronLeft size={18} />
             </IconBtn>
             <MonthPicker value={mes} onChange={setMes}>
               <button className="flex min-w-0 items-center gap-1 rounded-xl px-1.5 py-0.5 hover:bg-soft" aria-label="Escolher mês">
-                <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
+                <h1 className="truncate text-[17px] font-bold tracking-tight sm:text-2xl">
                   {nomeMes(mes)} <span className="font-semibold text-muted">{mes.slice(0, 4)}</span>
                 </h1>
                 <ChevronDown size={16} className="shrink-0 text-muted" />
@@ -120,7 +137,7 @@ export default function App() {
               <ChevronRight size={18} />
             </IconBtn>
             {mes !== mesAtual() && (
-              <button onClick={() => setMes(mesAtual())} className="ml-1 hidden rounded-full bg-soft px-2.5 py-1 text-xs font-semibold text-muted hover:text-ink sm:block">
+              <button onClick={() => setMes(mesAtual())} className="ml-0.5 shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:brightness-95 sm:ml-1">
                 Hoje
               </button>
             )}
@@ -129,8 +146,15 @@ export default function App() {
           <IconBtn label="Atualizar dados" onClick={reload}>
             <RefreshCw size={17} className={cx((loading || busy) && 'animate-spin')} />
           </IconBtn>
-          {!semMes && <AddButton onPick={setAdd} />}
+          {!semMes && (
+            <div className="hidden lg:flex">
+              <AddButton onPick={setAdd} />
+            </div>
+          )}
         </header>
+
+        {/* Celular: nome da página (a barra inferior só mostra parte delas) */}
+        {!semMes && <h2 className="mb-3 px-1.5 text-xl font-bold tracking-tight lg:hidden">{TODAS.find((p) => p.id === page)?.label}</h2>}
 
         {error && (
           <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-bad/30 bg-bad-soft px-4 py-3 text-sm text-bad">
@@ -168,21 +192,105 @@ export default function App() {
         )}
       </main>
 
-      {/* Navegação (celular) */}
-      <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-2xl border border-line bg-card/95 p-1.5 shadow-lg backdrop-blur lg:hidden">
-        {[...PAGES, { ...AJUSTES[0], label: 'Ajustes', curto: undefined }].map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setPage(p.id)}
-            className={cx('flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium sm:text-[11px]', page === p.id ? 'text-primary' : 'text-muted')}
-          >
-            {p.icon}
-            <span className="max-w-full truncate">{p.curto ?? p.label}</span>
-          </button>
+      {/* Navegação (celular): 3 abas principais, Adicionar no centro e "Mais" com o restante */}
+      <nav
+        aria-label="Navegação"
+        className="fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-40 mx-auto grid max-w-md grid-cols-[1fr_1fr_3.5rem_1fr_1fr] items-center rounded-3xl border border-line bg-card/95 px-1 py-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden"
+      >
+        {PRINCIPAIS.slice(0, 2).map((p) => (
+          <TabBtn key={p.id} label={p.label} icon={TODAS.find((x) => x.id === p.id)!.icon} ativo={page === p.id && !mais} onClick={() => irPara(p.id)} />
         ))}
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              setMais(false)
+              setAdd('gasto')
+            }}
+            aria-label="Adicionar"
+            className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_6px_16px_-4px_var(--color-primary)] transition active:scale-95"
+          >
+            <Plus size={24} strokeWidth={2.4} />
+          </button>
+        </div>
+        {PRINCIPAIS.slice(2).map((p) => (
+          <TabBtn key={p.id} label={p.label} icon={TODAS.find((x) => x.id === p.id)!.icon} ativo={page === p.id && !mais} onClick={() => irPara(p.id)} />
+        ))}
+        <TabBtn label="Mais" icon={<LayoutGrid size={20} />} ativo={mais || NO_MAIS.some((p) => p.id === page)} onClick={() => setMais((m) => !m)} />
       </nav>
 
+      {mais && <MaisSheet page={page} onPick={irPara} onClose={closeMais} dark={dark} setDark={setDark} />}
+
       {add && model && <AddModal key={add} kind={add} setKind={setAdd} onClose={closeAdd} model={model} mes={mes} finance={finance} />}
+    </div>
+  )
+}
+
+function TabBtn({ label, icon, ativo, onClick }: { label: string; icon: ReactNode; ativo: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={ativo ? 'page' : undefined}
+      className={cx(
+        'flex min-w-0 flex-col items-center gap-1 rounded-2xl py-1 text-[11px] font-semibold tracking-tight transition active:scale-95',
+        ativo ? 'text-primary' : 'text-muted',
+      )}
+    >
+      <span className={cx('flex h-7 w-12 items-center justify-center rounded-full transition [&_svg]:size-5', ativo && 'bg-primary-soft')}>{icon}</span>
+      <span className="max-w-full truncate">{label}</span>
+    </button>
+  )
+}
+
+/** Celular: folha inferior com as páginas que não cabem na barra. */
+function MaisSheet({
+  page,
+  onPick,
+  onClose,
+  dark,
+  setDark,
+}: {
+  page: Page
+  onPick: (p: Page) => void
+  onClose: () => void
+  dark: boolean
+  setDark: (d: boolean) => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => escFecha(e, onClose)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[35] bg-slate-950/40 backdrop-blur-[2px] lg:hidden" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label="Mais páginas"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-line bg-card px-4 pt-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))] shadow-2xl"
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
+        <div className="grid grid-cols-3 gap-2">
+          {NO_MAIS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => onPick(p.id)}
+              className={cx(
+                'flex flex-col items-center gap-2 rounded-2xl px-1 py-3.5 text-xs font-semibold transition active:scale-95',
+                page === p.id ? 'bg-primary-soft text-primary' : 'bg-soft text-ink',
+              )}
+            >
+              <span className={cx('[&_svg]:size-[22px]', page === p.id ? 'text-primary' : 'text-muted')}>{p.icon}</span>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center justify-between rounded-2xl bg-soft px-4 py-2.5 text-sm font-medium text-muted">
+          <span className="flex items-center gap-2">
+            {dark ? <Moon size={16} /> : <Sun size={16} />} Tema
+          </span>
+          <ThemeToggle dark={dark} setDark={setDark} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -222,7 +330,7 @@ function IconBtn({ children, onClick, label }: { children: ReactNode; onClick: (
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-soft hover:text-ink"
+      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-soft hover:text-ink active:bg-soft sm:size-9"
     >
       {children}
     </button>

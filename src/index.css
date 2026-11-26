@@ -86,3 +86,58 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;
 }
+
+/* ---------- celular ---------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+@media (max-width: 639px) {
+  /* iOS dá zoom ao focar campos com fonte < 16px */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+@media (pointer: coarse) {
+  /* no toque, as listas roláveis de lado não precisam de barra visível */
+  .scroll-thin {
+    scrollbar-width: none;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    display: none;
+  }
+}
+/* Faixa rolável de lado com encaixe (chips, cartões de resumo) */
+.snap-row {
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.75rem;
+}
+.snap-row > * {
+  scroll-snap-align: start;
+}
+
+/* Modais: no celular viram folha inferior com o rodapé (Cancelar/Salvar) sempre visível */
+@media (max-width: 639px) {
+  .sheet {
+    padding-bottom: 0 !important;
+  }
+  .sheet-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 1.5rem -1.25rem 0;
+    padding: 0.75rem 1.25rem max(0.75rem, env(safe-area-inset-bottom));
+    background: var(--color-card);
+    border-top: 1px solid var(--color-line);
+  }
+  .sheet-footer.justify-end > button {
+    flex: 1;
+    padding-block: 0.7rem;
+  }
+}

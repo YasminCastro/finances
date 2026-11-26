@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
 import { fmt } from '../lib/finance'
+import { cn } from '../lib/utils'
 
+/** Junta classes; em conflito (ex.: p-4 do componente e p-0 de quem usa) vale a última. */
 export function cx(...xs: (string | false | null | undefined)[]) {
-  return xs.filter(Boolean).join(' ')
+  return cn(...xs)
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <section
       className={cx(
-        'rounded-3xl border border-line bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6',
+        'rounded-3xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6',
         className,
       )}
     >
@@ -20,7 +22,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 
 export function CardTitle({ children, extra, icon }: { children: ReactNode; extra?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
       <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
         {icon && <span className="text-muted">{icon}</span>}
         {children}
@@ -109,7 +111,7 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export const inputCls =
-  'w-full rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20'
+  'w-full rounded-xl border border-line bg-card px-3 py-2.5 text-base text-ink sm:text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20'
 
 export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (

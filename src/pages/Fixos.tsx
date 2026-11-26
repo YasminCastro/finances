@@ -364,7 +364,7 @@ function FixoModal({ alvo, model, mes, finance, onClose }: { alvo: Alvo; model: 
       <form
         onSubmit={salvar}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">
@@ -481,7 +481,7 @@ function FixoModal({ alvo, model, mes, finance, onClose }: { alvo: Alvo; model: 
         </div>
 
         {(err || finance.error) && <div className="mt-4 rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{err || finance.error}</div>}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="sheet-footer mt-6 flex justify-end gap-2">
           <Button onClick={onClose}>Cancelar</Button>
           <Button type="submit" variant={modo === 'encerrar' ? 'danger' : 'primary'} disabled={finance.busy}>
             {finance.busy ? 'Salvando…' : modo === 'encerrar' && !novo ? 'Encerrar' : 'Salvar'}

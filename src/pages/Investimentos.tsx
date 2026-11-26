@@ -37,7 +37,7 @@ export function Investimentos({ model, mes, setMes, finance }: { model: Model; m
 
   return (
     <div className="space-y-4 lg:space-y-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 [&>:first-child]:col-span-2 sm:[&>:first-child]:col-span-1">
         <Resumo
           titulo={`Investido em ${mesCurto(mes)}`}
           valor={investidoMes}
@@ -64,7 +64,7 @@ export function Investimentos({ model, mes, setMes, finance }: { model: Model; m
 function Resumo({ titulo, valor, detalhe, tom }: { titulo: string; valor: number; detalhe: string; tom?: 'primary' | 'warn' | 'good' }) {
   return (
     <div className="rounded-3xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-medium text-muted">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-medium text-muted">
         <span>{titulo}</span>
         <span
           className={cx(
@@ -210,9 +210,9 @@ function EditorMes({
             {linhas.map((l) => (
               <li
                 key={l.key}
-                className="grid grid-cols-[minmax(0,1fr)_auto_2rem] items-center gap-2 rounded-2xl border border-line p-2 sm:col-span-4 sm:grid-cols-subgrid sm:border-0 sm:p-0"
+                className="grid grid-cols-[auto_minmax(0,1fr)_2.25rem] items-center gap-2 rounded-2xl border border-line p-2 sm:col-span-4 sm:grid-cols-subgrid sm:border-0 sm:p-0"
               >
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="order-1 col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: cor(l.destino) }} aria-hidden />
                   <Dropdown
                     className="min-w-0 flex-1"
@@ -221,17 +221,19 @@ function EditorMes({
                     opcoes={[...new Set([...model.destinos, l.destino])].map((d) => ({ value: d, label: d }))}
                   />
                 </div>
-                <TipoMov resgate={l.resgate} onChange={(resgate) => set(l.key, { resgate })} />
+                <div className="order-3 sm:order-2">
+                  <TipoMov resgate={l.resgate} onChange={(resgate) => set(l.key, { resgate })} />
+                </div>
                 <button
                   type="button"
                   onClick={() => setLinhas((ls) => ls.filter((x) => x.key !== l.key))}
-                  className="order-3 flex size-8 items-center justify-center rounded-lg text-muted hover:bg-bad-soft hover:text-bad sm:order-4"
+                  className="order-2 flex size-9 items-center justify-center rounded-lg text-muted hover:bg-bad-soft hover:text-bad sm:order-4 sm:size-8"
                   aria-label={`Remover ${l.destino}`}
                   title="Remover"
                 >
                   <Trash2 size={15} />
                 </button>
-                <div className="order-4 col-span-3 sm:order-3 sm:col-span-1">
+                <div className="order-4 col-span-2 sm:order-3 sm:col-span-1">
                   <MoneyInput value={l.valor} onChange={(valor) => set(l.key, { valor })} />
                 </div>
               </li>

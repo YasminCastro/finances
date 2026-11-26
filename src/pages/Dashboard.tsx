@@ -342,7 +342,7 @@ function Fluxo({ dados, selecionados, hojeMes, filtrando }: { dados: DadosMes[];
           )
         })}
       </div>
-      <p className="mt-2 text-[11px] text-muted">Passe o mouse num mês para ver o detalhe. Meses futuros aparecem mais claros (previsão).</p>
+      <p className="mt-2 text-[11px] text-muted">Toque (ou passe o mouse) num mês para ver o detalhe. Meses futuros aparecem mais claros (previsão).</p>
     </Card>
   )
 }
@@ -376,7 +376,7 @@ function Categorias({
       {itens.length === 0 ? (
         <Empty>Sem saídas no período.</Empty>
       ) : (
-        <ul className="scroll-thin -mx-1 max-h-80 flex-1 space-y-1 overflow-y-auto px-1 pr-2">
+        <ul className="scroll-thin -mx-1 flex-1 space-y-1 px-1 lg:max-h-80 lg:overflow-y-auto lg:pr-2">
           {itens.map((c) => {
             const dif = temAnterior && c.antes > 0 ? (c.valor - c.antes) / c.antes : null
             return (

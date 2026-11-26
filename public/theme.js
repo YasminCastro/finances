@@ -2,6 +2,9 @@
 // separado porque a Content-Security-Policy do site não permite scripts inline.
 try {
   var t = localStorage.getItem('financas.theme')
-  if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches))
+  if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
     document.documentElement.classList.add('dark')
+    var m = document.querySelector('meta[name="theme-color"]')
+    if (m) m.setAttribute('content', '#0b1120')
+  }
 } catch (e) {}

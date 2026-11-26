@@ -144,7 +144,7 @@ export function EditLancamentoModal({
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={onClose}>
         <div
           onMouseDown={(e) => e.stopPropagation()}
-          className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+          className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
         >
           <AdiantarParcelas parcela={l} serie={serie} finance={finance} onVoltar={() => setAdiantar(false)} onClose={onClose} />
         </div>
@@ -156,7 +156,7 @@ export function EditLancamentoModal({
       <form
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-5 flex items-center justify-between">
           <div>
@@ -318,7 +318,7 @@ export function EditLancamentoModal({
             </div>
           </div>
         ) : (
-          <div className="mt-6 flex items-center justify-between gap-2">
+          <div className="sheet-footer mt-6 flex items-center justify-between gap-2">
             <div className="flex gap-1">
               <Button variant="ghost" className="text-bad hover:bg-bad-soft hover:text-bad" onClick={() => setApagar(true)}>
                 <Trash2 size={16} /> Excluir

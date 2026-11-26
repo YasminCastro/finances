@@ -87,7 +87,7 @@ export function Carro({ model, mes, setMes, finance }: { model: Model; mes: stri
 
   return (
     <div className="space-y-4 lg:space-y-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 [&>:first-child]:col-span-2 sm:[&>:first-child]:col-span-1">
         <Resumo
           titulo={`Carro em ${mesCurto(mes)}`}
           valor={totalMes}
@@ -111,7 +111,7 @@ export function Carro({ model, mes, setMes, finance }: { model: Model; mes: stri
 function Resumo({ titulo, valor, detalhe, tom }: { titulo: string; valor: number; detalhe: string; tom?: 'primary' | 'warn' }) {
   return (
     <div className="rounded-3xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-medium text-muted">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-medium text-muted">
         <span>{titulo}</span>
         <span className={cx('rounded-full px-2 py-0.5 text-[11px] tabular-nums', tom === 'warn' ? 'bg-warn-soft text-warn' : 'bg-soft')}>{detalhe}</span>
       </div>
@@ -842,7 +842,7 @@ function TrocaModal({ model, troca, finance, onClose }: { model: Model; troca: T
         )}
 
         {err && <p className="text-sm text-bad">{err}</p>}
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="sheet-footer flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
@@ -961,7 +961,7 @@ function ImportarModal({ model, finance, onClose }: { model: Model; finance: Fin
           </div>
         )}
         {txt.trim() && lidas.length === 0 && <p className="text-sm text-bad">Não reconheci nenhuma linha. A 1ª coluna precisa ser a data (dd/mm/aaaa).</p>}
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="sheet-footer flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
@@ -982,7 +982,7 @@ function Modal({ titulo, children, onClose, onSubmit }: { titulo: string; childr
       <form
         onSubmit={onSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+        className="sheet max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{titulo}</h2>
