@@ -1,10 +1,11 @@
 import { escFecha } from '@/lib/utils'
 import { Barcode, CreditCard, Percent, ExternalLink, LogOut, Moon, Pencil, PiggyBank, Plus, QrCode, Sun, Tags, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { Bar, Button, Card, CardTitle, Empty, Field, cx, inputCls } from '../components/kit'
 import { MoneyInput } from '../components/MoneyInput'
-import { fmt, formaDe, limiteCartao, metaDoDestino, salarioFixo } from '../lib/finance'
+import { brl, fmt, formaDe, limiteCartao, metaDoDestino, salarioFixo, sugestoesOrcamento } from '../lib/finance'
+import type { SugestaoOrcamento } from '../lib/finance'
 import { SPREADSHEET_URL } from '../lib/google'
 import type { Row } from '../lib/google'
 import { corDaPosicao, ordemAlfabetica, PALETA_CATEGORIAS } from '../lib/cores'
@@ -20,6 +21,7 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
   const [edit, setEdit] = useState<Editando | null>(null)
   const t = model.db.tables
   const uso = usos(model)
+  const sugestoes = sugestoesOrcamento(model, mesAtual())
   const cartoes = t.formas_pagamento.filter((r) => tipoForma(r.tipo) === 'cartao')
   const outras = t.formas_pagamento.filter((r) => tipoForma(r.tipo) !== 'cartao')
 
@@ -97,21 +99,24 @@ export function Config({ model, finance, dark, setDark }: { model: Model; financ
         <CardTitle icon={<Tags size={18} />} extra={<NovoBtn onClick={() => setEdit({ tab: 'categorias' })} />}>
           Categorias
         </CardTitle>
-        <p className="-mt-2 mb-3 text-xs text-muted">O orçamento mensal é o “valor esperado” usado no card de gastos por categoria.</p>
+        <p className="-mt-2 mb-3 text-xs text-muted">
+          O orçamento mensal é o “valor esperado” usado no card de gastos por categoria. É opcional; a sugestão vem do que você costuma gastar.
+        </p>
         <ul className="divide-y divide-line">
           {[...t.categorias].sort((a, b) => ordemAlfabetica(str(a.nome), str(b.nome))).map((r) => {
             const n = uso.categorias.get(str(r.nome).toLowerCase()) ?? 0
+            const sug = sugestoes.get(str(r.nome).toLowerCase())
             return (
-              <li key={r._row} className="flex items-center gap-3 py-2.5">
-                <span className="size-3 shrink-0 rounded-full" style={{ background: corCategoria(model, str(r.nome)) }} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{str(r.nome)}</div>
-                </div>
-                <div className="text-sm whitespace-nowrap">
-                  {num(r.orcamento_mensal) ? <b>R$ {fmt(num(r.orcamento_mensal))}</b> : <span className="text-xs text-faint">sem orçamento</span>}
-                </div>
-                <Acoes onEditar={() => setEdit({ tab: 'categorias', row: r })} emUso={n} onExcluir={() => finance.actions.excluirConfig('categorias', r)} busy={finance.busy} />
-              </li>
+              <CategoriaLinha
+                key={r._row}
+                nome={str(r.nome)}
+                cor={corCategoria(model, str(r.nome))}
+                orcamento={num(r.orcamento_mensal)}
+                sug={sug}
+                busy={finance.busy}
+                onUsar={(v) => finance.actions.salvarConfig('categorias', r, { nome: str(r.nome), orcamento_mensal: v, cor: str(r.cor) })}
+                acoes={<Acoes onEditar={() => setEdit({ tab: 'categorias', row: r })} emUso={n} onExcluir={() => finance.actions.excluirConfig('categorias', r)} busy={finance.busy} />}
+              />
             )
           })}
         </ul>
@@ -447,6 +452,129 @@ function PreviaFechamento({ dia, dias }: { dia: number; dias: number | null }) {
   )
 }
 
+/**
+ * Linha da categoria: a barra é o quanto costuma gastar e o tracinho, o orçamento.
+ * A escala é da própria linha (o maior dos dois), porque aqui se compara orçamento × hábito
+ * dentro da categoria, não as categorias entre si. Sem orçamento não há alerta nenhum.
+ */
+function CategoriaLinha({
+  nome,
+  cor,
+  orcamento,
+  sug,
+  busy,
+  onUsar,
+  acoes,
+}: {
+  nome: string
+  cor: string
+  orcamento: number
+  sug: SugestaoOrcamento | undefined
+  busy: boolean
+  onUsar: (v: number) => void
+  acoes: ReactNode
+}) {
+  const temOrc = orcamento > 0
+  const escala = Math.max(orcamento, sug?.valor ?? 0, 1)
+  let status: ReactNode = null
+  if (sug && temOrc) {
+    if (sug.valor > orcamento * 1.1) status = <span className="font-semibold text-warn">costuma passar {brl(sug.valor - orcamento)}</span>
+    else if (sug.valor < orcamento * 0.6) status = <span>orçamento folgado</span>
+    else status = <span className="text-good">bem ajustado</span>
+  } else if (sug) status = <span>sem orçamento</span>
+
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <span className="size-3 shrink-0 rounded-full" style={{ background: cor }} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-semibold">{nome}</span>
+          {temOrc ? (
+            <b className="text-sm whitespace-nowrap tabular-nums">R$ {fmt(orcamento)}</b>
+          ) : sug ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onUsar(sug.valor)}
+              title="Definir esta sugestão como orçamento mensal"
+              className="shrink-0 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-primary hover:brightness-95 disabled:opacity-50"
+            >
+              Usar R$ {fmt(sug.valor)}
+            </button>
+          ) : (
+            <span className="text-xs whitespace-nowrap text-faint">sem orçamento</span>
+          )}
+        </div>
+        {sug && (
+          <>
+            <div className="relative mt-1.5 h-1.5 rounded-full bg-soft" title={`Costuma gastar ~R$ ${fmt(sug.valor)}`}>
+              <div className="h-full rounded-full" style={{ width: `${(sug.valor / escala) * 100}%`, background: cor }} />
+              {temOrc && (
+                <div
+                  className="absolute -top-0.5 h-2.5 w-0.5 rounded bg-ink/60"
+                  style={{ left: `calc(${(orcamento / escala) * 100}% - 1px)` }}
+                  title={`Orçamento: ${brl(orcamento)}`}
+                />
+              )}
+            </div>
+            <div
+              className="mt-1 flex flex-wrap gap-x-1 text-[11px] text-muted tabular-nums"
+              title={`Mediana dos gastos avulsos dos últimos ${sug.meses} meses (sem fixos e parcelas)`}
+            >
+              <span>costuma gastar ~R$ {fmt(sug.valor)}</span>
+              {status && <span aria-hidden>·</span>}
+              {status}
+            </div>
+          </>
+        )}
+      </div>
+      {acoes}
+    </li>
+  )
+}
+
+/** Sugestão de orçamento com base no histórico; nunca é aplicada sozinha. */
+function SugestaoOrcamentoDica({
+  model,
+  categoria,
+  atual,
+  onUsar,
+  onLimpar,
+}: {
+  model: Model
+  categoria: string
+  atual: string
+  onUsar: (v: number) => void
+  onLimpar: () => void
+}) {
+  const s = categoria ? sugestoesOrcamento(model, mesAtual()).get(categoria.toLowerCase()) : undefined
+  const temValor = num(atual) > 0
+  return (
+    <div className="mt-1.5 space-y-1 text-xs text-muted">
+      {s ? (
+        <p>
+          Sugestão: <b className="text-ink">R$ {fmt(s.valor)}</b> — mediana dos seus gastos avulsos nos últimos {s.meses} meses (sem fixos e parcelas).{' '}
+          {num(atual) !== s.valor && (
+            <button type="button" onClick={() => onUsar(s.valor)} className="font-semibold text-primary hover:underline">
+              Usar
+            </button>
+          )}
+        </p>
+      ) : (
+        categoria && <p>Ainda não há histórico suficiente para sugerir um valor.</p>
+      )}
+      <p className="text-faint">
+        Deixe em branco se não quiser orçamento para esta categoria.{' '}
+        {temValor && (
+          <button type="button" onClick={onLimpar} className="font-semibold text-muted hover:text-ink hover:underline">
+            Remover orçamento
+          </button>
+        )}
+      </p>
+    </div>
+  )
+}
+
 const TITULOS: Record<TabConfig, [string, string]> = {
   formas_pagamento: ['Nova forma de pagamento', 'Editar forma de pagamento'],
   categorias: ['Nova categoria', 'Editar categoria'],
@@ -623,9 +751,18 @@ function ConfigModal({
 
           {edit.tab === 'categorias' && (
             <>
-              <Field label="Orçamento mensal (opcional)">
-                <MoneyInput value={f.orcamento} onChange={(v) => set('orcamento', v)} />
-              </Field>
+              <div>
+                <Field label="Orçamento mensal (opcional)">
+                  <MoneyInput value={f.orcamento} onChange={(v) => set('orcamento', v)} />
+                </Field>
+                <SugestaoOrcamentoDica
+                  model={model}
+                  categoria={antigo || f.nome.trim()}
+                  atual={f.orcamento}
+                  onUsar={(v) => set('orcamento', fmt(v))}
+                  onLimpar={() => set('orcamento', '')}
+                />
+              </div>
               <SeletorCor cores={PALETA_CATEGORIAS} value={f.cor} onChange={(c) => set('cor', c)} />
             </>
           )}

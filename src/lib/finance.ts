@@ -362,15 +362,59 @@ export interface CategoriaResumo {
   cor: string
   gasto: number
   orcamento: number
+  /** quanto costuma gastar (ver sugestoesOrcamento); null = histórico insuficiente */
+  sugestao: number | null
+}
+
+export interface SugestaoOrcamento {
+  valor: number
+  /** quantos meses entraram na conta */
+  meses: number
+}
+
+const MESES_SUGESTAO = 6
+const MIN_MESES_SUGESTAO = 3
+
+/**
+ * Sugestão de orçamento por categoria: a mediana dos gastos avulsos (tipo "gasto")
+ * dos últimos 6 meses com lançamentos antes de `mes`. Fixos e parcelas ficam de fora —
+ * já são conhecidos de antemão, e uma compra grande parcelada inflaria o histórico.
+ * Meses em que a categoria não teve gasto contam como zero. É só uma referência:
+ * nada é gravado como orçamento.
+ */
+export function sugestoesOrcamento(model: Model, mes: string): Map<string, SugestaoOrcamento> {
+  const gastos = model.lancamentos.filter((l) => l.tipo === 'gasto' && !l.projetado && l.mes_ref < mes)
+  const meses = [...new Set(gastos.map((l) => l.mes_ref))].sort().slice(-MESES_SUGESTAO)
+  const out = new Map<string, SugestaoOrcamento>()
+  if (meses.length < MIN_MESES_SUGESTAO) return out
+  const porCat = new Map<string, Map<string, number>>()
+  for (const l of gastos) {
+    if (!meses.includes(l.mes_ref)) continue
+    const chave = l.categoria.toLowerCase()
+    const m = porCat.get(chave) ?? new Map<string, number>()
+    m.set(l.mes_ref, (m.get(l.mes_ref) ?? 0) + l.valor)
+    porCat.set(chave, m)
+  }
+  for (const [chave, m] of porCat) {
+    const vals = meses.map((x) => m.get(x) ?? 0).sort((a, b) => a - b)
+    const meio = vals.length / 2
+    const mediana = vals.length % 2 ? vals[Math.floor(meio)] : (vals[meio - 1] + vals[meio]) / 2
+    // arredonda para cima, de 10 em 10: é uma referência, não um valor exato
+    const valor = Math.ceil(mediana / 10) * 10
+    if (valor > 0) out.set(chave, { valor, meses: meses.length })
+  }
+  return out
 }
 
 /** Gastos do mês por categoria, em ordem alfabética. */
 export function categoriasDoMes(model: Model, mes: string): CategoriaResumo[] {
   const { itens } = itensDoMes(model, mes)
+  const sugestoes = sugestoesOrcamento(model, mes)
+  const sug = (nome: string) => sugestoes.get(nome.toLowerCase())?.valor ?? null
   const mapa = new Map<string, CategoriaResumo>()
-  for (const c of model.categorias) mapa.set(c.nome, { nome: c.nome, cor: c.cor, gasto: 0, orcamento: c.orcamento })
+  for (const c of model.categorias) mapa.set(c.nome, { nome: c.nome, cor: c.cor, gasto: 0, orcamento: c.orcamento, sugestao: sug(c.nome) })
   for (const l of itens) {
-    const c = mapa.get(l.categoria) ?? { nome: l.categoria, cor: corCategoria(model, l.categoria), gasto: 0, orcamento: 0 }
+    const c = mapa.get(l.categoria) ?? { nome: l.categoria, cor: corCategoria(model, l.categoria), gasto: 0, orcamento: 0, sugestao: sug(l.categoria) }
     c.gasto += l.valor
     mapa.set(l.categoria, c)
   }

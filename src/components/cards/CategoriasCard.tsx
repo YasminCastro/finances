@@ -105,12 +105,20 @@ export function CategoriasCard({ cats }: { cats: CategoriaResumo[] }) {
               </div>
               <div className="mt-1 flex justify-between gap-2 text-[11px] text-muted tabular-nums">
                 <span>{c.gasto > 0 ? `${pctTotal < 1 ? '<1' : Math.round(pctTotal)}% do total` : 'nada gasto'}</span>
-                {temMeta &&
-                  (over ? (
+                {temMeta ? (
+                  over ? (
                     <span className="font-semibold text-bad">{brl(c.gasto - c.orcamento)} acima</span>
                   ) : (
                     <span>sobram {brl(c.orcamento - c.gasto)}</span>
-                  ))}
+                  )
+                ) : (
+                  // sem orçamento é uma escolha válida: só uma referência, sem alerta
+                  c.sugestao != null && (
+                    <span className="text-faint" title="Mediana dos gastos avulsos dos últimos meses (sem fixos e parcelas)">
+                      costuma gastar ~R$ {fmt(c.sugestao)}
+                    </span>
+                  )
+                )}
               </div>
             </li>
           )
