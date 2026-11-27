@@ -196,6 +196,7 @@ export interface Entrada {
   valor: number
   /** entrada fixa estimada (ainda não lançada no mês) */
   projetado?: boolean
+  row?: Row
 }
 
 export type EntradaFixa = VersaoFixa
@@ -375,6 +376,7 @@ export function buildModel(db: DB): Model {
       mes_ref: normMes(r.mes_ref),
       descricao: str(r.descricao),
       valor: num(r.valor),
+      row: r,
     })),
     entradasFixas: t.entradas_fixas.filter((r) => str(r.descricao)).map(versao),
     investimentos: t.investimentos.map((r) => ({

@@ -1,10 +1,11 @@
 import { ArrowDownRight, ArrowUpRight, Wallet } from 'lucide-react'
 import { useState } from 'react'
-import { brl, fmt, mesCurto, nomeMes, pct } from '../../lib/finance'
+import { brl, fmt, mesAtual, mesCurto, nomeMes, pct } from '../../lib/finance'
 import type { ResumoMes } from '../../lib/finance'
 import { num } from '../../lib/model'
 import type { Entrada } from '../../lib/model'
-import { Button, Card, Money, cx, inputCls } from '../kit'
+import { Button, Card, Money, cx } from '../kit'
+import { MoneyInput } from '../MoneyInput'
 
 export interface PontoHistorico {
   mes: string
@@ -69,7 +70,7 @@ export function SaldoCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
-        <Legend label={r.entradasProjetadas ? 'Entradas (estimadas)' : 'Entradas'} valor={brl(r.entradas)} />
+        <Legend label={r.entradasProjetadas && mes <= mesAtual() ? 'Entradas (estimadas)' : 'Entradas'} valor={brl(r.entradas)} />
         {segs.map((s) => (
           <Legend
             key={s.label}
@@ -91,7 +92,8 @@ export function SaldoCard({
 
       <Historico pontos={historico} mes={mes} />
 
-      {r.entradasProjetadas && (
+      {/* meses futuros usam o valor da entrada fixa automaticamente: só pede confirmação a partir do mês corrente */}
+      {r.entradasProjetadas && mes <= mesAtual() && (
         <EntradasEstimadas
           key={r.entradasItens.map((e) => e.id + e.valor).join()}
           itens={r.entradasItens.filter((e) => e.projetado)}
@@ -129,12 +131,11 @@ function EntradasEstimadas({
         {itens.map((e, k) => (
           <label key={e.id} className="flex items-center gap-2">
             <span className="font-semibold">{e.descricao}</span>
-            <span className="text-muted">R$</span>
-            <input
-              inputMode="decimal"
+            <MoneyInput
               value={valores[k]}
-              onChange={(ev) => setValores((v) => v.map((x, j) => (j === k ? ev.target.value : x)))}
-              className={cx(inputCls, 'w-28 py-1.5')}
+              onChange={(nv) => setValores((v) => v.map((x, j) => (j === k ? nv : x)))}
+              className="w-36"
+              ariaLabel={`Valor recebido de ${e.descricao}`}
             />
           </label>
         ))}

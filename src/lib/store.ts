@@ -18,8 +18,8 @@ import {
   updateRows,
 } from './google'
 import type { Cell, DB, Row, Tab } from './google'
-import { buildModel, normMes, str, vigente } from './model'
-import type { Fixo, Lancamento, Model, Receber, VersaoFixa } from './model'
+import { buildModel, normMes, num, str, vigente } from './model'
+import type { Entrada, Fixo, Lancamento, Model, Receber, VersaoFixa } from './model'
 
 export type TabFixa = 'fixos' | 'entradas_fixas'
 export type TabConfig = 'formas_pagamento' | 'categorias' | 'destinos_investimento'
@@ -252,6 +252,23 @@ export function useFinance() {
       /** Altera a conta a partir de um mês: os meses anteriores mantêm o valor antigo. */
       alterarFixo: (tab: TabFixa, v: VersaoFixa, campos: Record<string, Cell>, aPartirDe: string) =>
         run(async (t, d) => {
+          // entrada fixa já confirmada nesses meses com o valor antigo: acompanha a mudança
+          // (sem isso, a confirmação gravada continua valendo no lugar do novo valor)
+          if (tab === 'entradas_fixas') {
+            const confirmadas = d.tables.entradas.filter((r) => {
+              const m = normMes(r.mes_ref)
+              return (
+                m >= aPartirDe &&
+                (!v.mes_fim || m <= v.mes_fim) &&
+                str(r.descricao).toLowerCase() === v.descricao.toLowerCase() &&
+                Math.abs(num(r.valor) - v.valor) < 0.005
+              )
+            })
+            const patch: Record<string, Cell> = {}
+            if (campos.valor !== undefined) patch.valor = campos.valor
+            if (campos.descricao !== undefined) patch.descricao = campos.descricao
+            if (confirmadas.length && Object.keys(patch).length) await updateRows(t, d, 'entradas', confirmadas.map((row) => ({ row, patch })))
+          }
           if (v.mes_inicio && aPartirDe <= v.mes_inicio) {
             await updateRow(t, d, tab, v.row, campos)
             return
@@ -302,6 +319,12 @@ export function useFinance() {
             itens.map((e, k) => ({ id: newId('E') + k, mes_ref: mes, descricao: e.descricao, valor: e.valor })),
           ),
         ),
+
+      /** Edita uma entrada já lançada (descrição, valor, mês). */
+      editarEntrada: (e: Entrada, campos: { descricao: string; valor: number; mes_ref: string }) =>
+        run((t, d) => (e.row ? updateRow(t, d, 'entradas', e.row, campos) : Promise.resolve())),
+
+      excluirEntrada: (e: Entrada) => run((t, d) => (e.row ? deleteRows(t, d, 'entradas', [e.row]) : Promise.resolve())),
 
       /**
        * Salva lançamentos (cada um com seus próprios campos): os que já estão na planilha são atualizados;

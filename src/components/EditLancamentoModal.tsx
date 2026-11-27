@@ -13,6 +13,7 @@ import { Dropdown } from './Dropdown'
 import { COBRANCA_VAZIA, CobrancaFields, montarCobranca } from './CobrancaFields'
 import type { CobrancaForm } from './CobrancaFields'
 import { DatePicker, MonthPicker } from './pickers'
+import { MoneyInput } from './MoneyInput'
 
 /** Diferença em meses entre dois "AAAA-MM". */
 function difMeses(de: string, ate: string) {
@@ -197,7 +198,7 @@ export function EditLancamentoModal({
               <input autoFocus className={inputCls} value={f.descricao} onChange={(e) => set('descricao')(e.target.value)} />
             </Field>
             <Field label={l.tipo === 'parcela' ? 'Valor da parcela' : 'Valor (R$)'}>
-              <input inputMode="decimal" className={inputCls} placeholder="0,00" value={f.valor} onChange={(e) => set('valor')(e.target.value)} />
+              <MoneyInput value={f.valor} onChange={set('valor')} negativo />
             </Field>
           </Row>
           <Row>

@@ -624,7 +624,7 @@ function ConfigModal({
           {edit.tab === 'categorias' && (
             <>
               <Field label="Orçamento mensal (opcional)">
-                <input inputMode="decimal" placeholder="0,00" className={inputCls} value={f.orcamento} onChange={(e) => set('orcamento', e.target.value)} />
+                <MoneyInput value={f.orcamento} onChange={(v) => set('orcamento', v)} />
               </Field>
               <SeletorCor cores={PALETA_CATEGORIAS} value={f.cor} onChange={(c) => set('cor', c)} />
             </>

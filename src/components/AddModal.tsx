@@ -366,7 +366,7 @@ export function AddModal({
           </Field>
           {mesField()}
         </Row>
-        <p className="text-xs text-muted">Para um resgate, use valor negativo (ex.: -200).</p>
+        <p className="text-xs text-muted">Para um resgate, digite um “-” no valor (ex.: -200,00).</p>
       </>
     )
   if (kind === 'receber')
@@ -420,11 +420,7 @@ export function AddModal({
               <input autoFocus className={inputCls} value={f.descricao ?? ''} onChange={(e) => set('descricao')(e.target.value)} />
             </Field>
             <Field label={kind === 'parcelado' ? 'Valor total da compra' : 'Valor (R$)'}>
-              {kind === 'parcelado' ? (
-                <MoneyInput value={f.valor ?? ''} onChange={set('valor')} />
-              ) : (
-                <input inputMode="decimal" className={inputCls} placeholder="0,00" value={f.valor ?? ''} onChange={(e) => set('valor')(e.target.value)} />
-              )}
+              <MoneyInput value={f.valor ?? ''} onChange={set('valor')} negativo={kind === 'investimento' || kind === 'gasto'} />
             </Field>
           </Row>
           {campos}

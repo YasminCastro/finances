@@ -127,8 +127,16 @@ export default function App() {
             </IconBtn>
             <MonthPicker value={mes} onChange={setMes}>
               <button className="flex min-w-0 items-center gap-1 rounded-xl px-1.5 py-0.5 hover:bg-soft" aria-label="Escolher mês">
-                <h1 className="truncate text-[17px] font-bold tracking-tight sm:text-2xl">
-                  {nomeMes(mes)} <span className="font-semibold text-muted">{mes.slice(0, 4)}</span>
+                {/* todos os meses ocupam a mesma célula (invisíveis): a largura é a do nome mais longo, e as setas não mudam de lugar */}
+                <h1 className="grid min-w-0 text-center text-[17px] font-bold tracking-tight sm:text-2xl">
+                  {Array.from({ length: 12 }, (_, k) => (
+                    <span key={k} className="invisible col-start-1 row-start-1 truncate" aria-hidden>
+                      {nomeMes(`2000-${String(k + 1).padStart(2, '0')}`)} <span className="font-semibold">0000</span>
+                    </span>
+                  ))}
+                  <span className="col-start-1 row-start-1 truncate">
+                    {nomeMes(mes)} <span className="font-semibold text-muted">{mes.slice(0, 4)}</span>
+                  </span>
                 </h1>
                 <ChevronDown size={16} className="shrink-0 text-muted" />
               </button>

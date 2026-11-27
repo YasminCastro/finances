@@ -1,12 +1,13 @@
-import { AlertTriangle, ChevronRight, HandCoins, Search, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, ChevronRight, HandCoins, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { cobrancasPorLancamento, fmt, formaDe, hoje, mesCurto, reembolsoDoMes, resumoMes } from '../lib/finance'
+import { cobrancasPorLancamento, fmt, formaDe, hoje, mesAtual, mesCurto, reembolsoDoMes, resumoMes } from '../lib/finance'
 import { corCategoria, vigente } from '../lib/model'
-import type { Lancamento, Model, Receber, TipoLimite } from '../lib/model'
+import type { Entrada, Lancamento, Model, Receber, TipoLimite } from '../lib/model'
 import type { Finance } from '../lib/store'
 import { Card, Money, cx, inputCls } from '../components/kit'
 import { Dropdown } from '../components/Dropdown'
 import { EditLancamentoModal } from '../components/EditLancamentoModal'
+import { EditEntradaModal } from '../components/EditEntradaModal'
 import { ordemAlfabetica } from '../lib/cores'
 
 const TIPOS = [
@@ -37,6 +38,7 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
   const [forma, setForma] = useState('')
   const [categoria, setCategoria] = useState('')
   const [editando, setEditando] = useState<Lancamento | null>(null)
+  const [editandoEntrada, setEditandoEntrada] = useState<Entrada | null>(null)
   const r = resumoMes(model, mes)
 
   // filtros que não são o tipo (o resumo por tipo respeita busca, forma e categoria)
@@ -275,7 +277,10 @@ export function Lancamentos({ model, mes, finance }: { model: Model; mes: string
         )}
       </Card>
 
+      <Entradas model={model} mes={mes} itens={r.entradasItens} total={r.entradas} onEdit={setEditandoEntrada} />
+
       {editando && <EditLancamentoModal lancamento={editando} onClose={() => setEditando(null)} model={model} finance={finance} />}
+      {editandoEntrada && <EditEntradaModal entrada={editandoEntrada} onClose={() => setEditandoEntrada(null)} model={model} finance={finance} />}
     </div>
   )
 }
@@ -371,5 +376,77 @@ function Item({ l, model, cobrancas, onEdit }: { l: Lancamento; model: Model; co
         className={cx('hidden shrink-0 text-faint transition sm:block', l.projetado ? 'invisible' : 'opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100')}
       />
     </button>
+  )
+}
+
+/** Entradas do mês (salário, extras): ficam separadas das saídas e podem ser editadas. */
+function Entradas({ model, mes, itens, total, onEdit }: { model: Model; mes: string; itens: Entrada[]; total: number; onEdit: (e: Entrada) => void }) {
+  const fixas = new Set(model.entradasFixas.filter((f) => f.ativo).map((f) => f.descricao.toLowerCase()))
+  const lista = [...itens].sort((a, b) => Number(!!a.projetado) - Number(!!b.projetado) || ordemAlfabetica(a.descricao, b.descricao))
+
+  return (
+    <Card className="overflow-hidden p-0 sm:p-0">
+      <div className="flex items-end justify-between gap-3 p-4 sm:p-5">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-ink">
+            Entradas <span className="font-normal text-muted">em {mesCurto(mes)}</span>
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">
+            {lista.length} {lista.length === 1 ? 'entrada' : 'entradas'} · use Adicionar → Entrada para lançar um extra
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[11px] font-medium text-muted">Total</div>
+          <Money value={total} className="text-lg text-good" />
+        </div>
+      </div>
+
+      {lista.length === 0 ? (
+        <p className="border-t border-line px-4 py-6 text-center text-xs text-muted sm:px-5">Nenhuma entrada em {mesCurto(mes)}.</p>
+      ) : (
+        <ul className="border-t border-line pb-2">
+          {lista.map((e, idx) => {
+            const fixa = e.projetado || fixas.has(e.descricao.toLowerCase())
+            // mês futuro: o valor da entrada fixa já é o valor do mês, não uma estimativa a confirmar
+            const aConfirmar = e.projetado && mes <= mesAtual()
+            return (
+              <li key={e.id} className="relative">
+                {idx > 0 && <span className="absolute top-0 right-0 left-16 h-px bg-line/70 sm:left-[4.375rem]" aria-hidden />}
+                <button
+                  type="button"
+                  onClick={() => onEdit(e)}
+                  disabled={e.projetado}
+                  title={aConfirmar ? 'Entrada fixa estimada: confirme no card de Saldo ou edite na página Fixos' : e.projetado ? 'Entrada fixa: o valor vem da página Fixos' : 'Editar'}
+                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors enabled:hover:bg-soft/70 focus-visible:bg-soft/70 focus-visible:outline-none sm:gap-3.5 sm:px-5"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-good-soft text-good" aria-hidden>
+                    <ArrowDownLeft size={18} />
+                  </span>
+                  <span className={cx('min-w-0 flex-1 truncate text-sm font-medium', aConfirmar ? 'text-muted' : 'text-ink')}>{e.descricao}</span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={cx('text-sm font-semibold whitespace-nowrap tabular-nums', aConfirmar ? 'text-muted' : 'text-good')}>R$ {fmt(e.valor)}</span>
+                    <span
+                      className={cx(
+                        'rounded-full border px-1.5 py-px text-[10px] leading-4 font-medium whitespace-nowrap',
+                        fixa ? TOM.primary : TOM.muted,
+                        aConfirmar && 'border-dashed border-current/40 bg-transparent',
+                      )}
+                    >
+                      {fixa ? 'fixa' : 'extra'}
+                      {aConfirmar && ' · estimado'}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    size={16}
+                    aria-hidden
+                    className={cx('hidden shrink-0 text-faint transition sm:block', e.projetado ? 'invisible' : 'opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100')}
+                  />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Card>
   )
 }
