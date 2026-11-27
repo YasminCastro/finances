@@ -421,6 +421,67 @@ export function categoriasDoMes(model: Model, mes: string): CategoriaResumo[] {
   return [...mapa.values()].filter((c) => c.gasto > 0 || c.orcamento > 0).sort((a, b) => ordemAlfabetica(a.nome, b.nome))
 }
 
+// ---------- semanas ----------
+
+export interface FaixaSemana {
+  /** AAAA-MM-DD, dentro do mês */
+  inicio: string
+  fim: string
+  dias: number
+}
+
+export interface SemanaResumo extends FaixaSemana {
+  total: number
+  itens: Lancamento[]
+}
+
+/**
+ * Semanas do mês, de segunda a domingo, cortadas no mês. Uma ponta com menos de 3 dias
+ * é juntada à semana vizinha para não comparar 1 dia com 7.
+ */
+export function faixasSemanas(mes: string): FaixaSemana[] {
+  const [y, m] = mes.split('-').map(Number)
+  const ultimo = new Date(y, m, 0).getDate()
+  const dia = (d: number) => `${mes}-${String(d).padStart(2, '0')}`
+  let faixas: [number, number][] = []
+  let ini = 1
+  for (let d = 1; d <= ultimo; d++) {
+    if (new Date(y, m - 1, d).getDay() === 0 || d === ultimo) {
+      faixas.push([ini, d])
+      ini = d + 1
+    }
+  }
+  const curta = (f: [number, number]) => f[1] - f[0] + 1 < 3
+  if (faixas.length > 1 && curta(faixas[0])) faixas = [[faixas[0][0], faixas[1][1]], ...faixas.slice(2)]
+  const n = faixas.length
+  if (n > 1 && curta(faixas[n - 1])) faixas = [...faixas.slice(0, n - 2), [faixas[n - 2][0], faixas[n - 1][1]]]
+  return faixas.map(([a, b]) => ({ inicio: dia(a), fim: dia(b), dias: b - a + 1 }))
+}
+
+/**
+ * Lançamentos com data entre `inicio` e `fim` (inclusive, dentro de um mês), em ordem de data.
+ * Olha também o mês seguinte: compra no cartão no fim do mês cai na fatura do outro, mas
+ * aconteceu nesta semana. Fixos sem lançamento entram no dia da cobrança.
+ */
+export function lancamentosEntre(model: Model, inicio: string, fim: string): Lancamento[] {
+  const mes = inicio.slice(0, 7)
+  return [mes, addMeses(mes, 1)]
+    .flatMap((m) => itensDoMes(model, m).itens)
+    .filter((l) => {
+      const d = l.data.slice(0, 10)
+      return d >= inicio && d <= fim
+    })
+    .sort((a, b) => a.data.localeCompare(b.data))
+}
+
+/** Saídas do mês por semana, pela data de cada lançamento; `passa` aplica os filtros da tela. */
+export function semanasDoMes(model: Model, mes: string, passa: (l: Lancamento) => boolean = () => true): SemanaResumo[] {
+  return faixasSemanas(mes).map((f) => {
+    const itens = lancamentosEntre(model, f.inicio, f.fim).filter(passa)
+    return { ...f, itens, total: sum(itens) }
+  })
+}
+
 // ---------- parcelas ----------
 
 export function parcelasPorMes(model: Model, mes: string, n = 12) {

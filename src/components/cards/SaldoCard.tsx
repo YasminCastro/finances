@@ -102,11 +102,9 @@ export function SaldoCard({
         />
       )}
 
-      {r.investido !== 0 && (
-        <div className="mt-5 border-t border-line pt-4 text-right text-sm text-muted">
-          Investido no mês: <b className="text-ink">{brl(r.investido)}</b>
-        </div>
-      )}
+      <div className="mt-5 border-t border-line pt-4 text-right text-sm text-muted">
+        Investido no mês: <b className="text-ink">{brl(r.investido)}</b>
+      </div>
     </Card>
   )
 }
@@ -156,7 +154,7 @@ function Historico({ pontos, mes }: { pontos: PontoHistorico[]; mes: string }) {
   const max = Math.max(...pontos.flatMap((p) => [p.entradas, p.saidas]), 1)
   const h = (v: number) => Math.max(1.5, (v / max) * 100)
   return (
-    <div className="mt-6 flex min-h-44 flex-1 flex-col border-t border-line pt-4">
+    <div className="mt-6 flex h-64 shrink-0 flex-col border-t border-line pt-4">
       <div className="mb-2 flex items-center justify-between text-xs">
         <span className="font-semibold text-muted">Mês a mês</span>
         <span className="flex gap-3 text-muted">

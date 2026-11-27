@@ -2,8 +2,9 @@ import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, FilterX } from
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Dropdown } from '../components/Dropdown'
+import { SemanasCard, faixaCurta } from '../components/cards/SemanasCard'
 import { Card, CardTitle, Empty, Money, cx } from '../components/kit'
-import { addMeses, brl, corDoDestino, dataCurta, fmt, investimentosResumo, mesAtual, mesCurto, resumoMes } from '../lib/finance'
+import { addMeses, brl, corDoDestino, dataCurta, faixasSemanas, fmt, investimentosResumo, lancamentosEntre, mesAtual, mesCurto, resumoMes, semanasDoMes } from '../lib/finance'
 import { chaveParcela, corCategoria } from '../lib/model'
 import type { Lancamento, Model, Tipo } from '../lib/model'
 import { ordemAlfabetica } from '../lib/cores'
@@ -54,6 +55,7 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
   const [f, setF] = useState<Filtros>({ categoria: '', forma: '', tipo: '' })
   const filtrando = !!(f.categoria || f.forma || f.tipo)
   const hojeMes = mesAtual()
+  const passa = (l: Lancamento) => (!f.categoria || l.categoria === f.categoria) && (!f.forma || l.forma_pagamento === f.forma) && (!f.tipo || l.tipo === f.tipo)
 
   const meses = mesesDo(periodo, ref)
   // no período de um mês, os gráficos de evolução mostram os 6 meses até ele, para dar contexto
@@ -62,7 +64,6 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
 
   const dados = useMemo(() => {
     const cache = new Map<string, DadosMes>()
-    const passa = (l: Lancamento) => (!f.categoria || l.categoria === f.categoria) && (!f.forma || l.forma_pagamento === f.forma) && (!f.tipo || l.tipo === f.tipo)
     return (m: string): DadosMes => {
       const c = cache.get(m)
       if (c) return c
@@ -74,29 +75,41 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
       cache.set(m, d)
       return d
     }
+    // passa depende só de f
   }, [model, f])
 
   const atual = meses.map(dados)
   const antes = anteriores.map(dados)
   const tot = (xs: DadosMes[], k: 'entradas' | 'saidas' | 'saidasTotal' | 'investido') => xs.reduce((a, x) => a + x[k], 0)
+
+  // ----- semana (só no período de um mês) -----
+  // a semana escolhida vale só para o mês em que foi escolhida
+  const [semSel, setSemSel] = useState<{ ref: string; inicio: string } | null>(null)
+  const semanas = periodo === 'mes' ? semanasDoMes(model, ref, passa) : []
+  const idxSem = semSel?.ref === ref ? semanas.findIndex((x) => x.inicio === semSel.inicio) : -1
+  const semana = idxSem >= 0 ? semanas[idxSem] : null
+  // a semana anterior à 1ª é a última do mês passado
+  const semAntes = !semana ? null : idxSem > 0 ? semanas[idxSem - 1] : faixasSemanas(addMeses(ref, -1)).at(-1)!
+  const itensSemAntes = semAntes ? lancamentosEntre(model, semAntes.inicio, semAntes.fim).filter(passa) : []
+  const escolherSemana = (inicio: string | null) => setSemSel(inicio ? { ref, inicio } : null)
+
   const entradas = tot(atual, 'entradas')
-  const saidas = tot(atual, 'saidas')
+  const saidas = semana ? semana.total : tot(atual, 'saidas')
+  const saidasAntes = semana ? soma(itensSemAntes) : tot(antes, 'saidas')
   const sobra = entradas - tot(atual, 'saidasTotal')
   const investido = tot(atual, 'investido')
   const temFuturo = meses.some((m) => m > hojeMes)
 
   // ----- categorias e formas no período -----
-  const itensPeriodo = atual.flatMap((d) => d.itens)
+  const itensPeriodo = semana ? semana.itens : atual.flatMap((d) => d.itens)
+  const itensAntes = semana ? itensSemAntes : antes.flatMap((d) => d.itens)
   const agrupar = (xs: Lancamento[], chave: (l: Lancamento) => string) => {
     const mp = new Map<string, number>()
     for (const l of xs) mp.set(chave(l), (mp.get(chave(l)) ?? 0) + l.valor)
     return mp
   }
   const catAtual = agrupar(itensPeriodo, (l) => l.categoria)
-  const catAntes = agrupar(
-    antes.flatMap((d) => d.itens),
-    (l) => l.categoria,
-  )
+  const catAntes = agrupar(itensAntes, (l) => l.categoria)
   const categorias = [...catAtual.entries()]
     .filter(([, v]) => v > 0)
     .map(([nome, valor]) => ({ nome, valor, antes: catAntes.get(nome) ?? 0, cor: corCategoria(model, nome) }))
@@ -184,10 +197,25 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
             )}
           </div>
         </div>
-        {(temFuturo || filtrando) && (
+        {periodo === 'mes' && (
+          <div className="scroll-thin -mx-3 mt-3 flex gap-1.5 overflow-x-auto border-t border-line px-3 pt-3 pb-0.5 text-xs sm:-mx-4 sm:px-4" role="group" aria-label="Semana">
+            <SemanaChip ativo={!semana} onClick={() => escolherSemana(null)}>
+              Mês inteiro
+            </SemanaChip>
+            {semanas.map((s, k) => (
+              <SemanaChip key={s.inicio} ativo={semana?.inicio === s.inicio} onClick={() => escolherSemana(semana?.inicio === s.inicio ? null : s.inicio)}>
+                Semana {k + 1}
+                <span className="ml-1 font-medium opacity-70">{faixaCurta(s)}</span>
+              </SemanaChip>
+            ))}
+          </div>
+        )}
+        {(temFuturo || filtrando || semana) && (
           <p className="mt-2 px-1 text-xs text-muted">
             {temFuturo && 'Meses futuros entram como previsão (fixos e parcelas já conhecidos). '}
-            {filtrando && 'Os filtros valem para as saídas; entradas, sobra e investimentos não mudam.'}
+            {semana
+              ? 'A semana vale para as saídas, categorias e maiores saídas, pela data de cada lançamento (compras no cartão entram na semana da compra); entradas, sobra e investimentos são do mês. A comparação é com a semana anterior.'
+              : filtrando && 'Os filtros valem para as saídas; entradas, sobra e investimentos não mudam.'}
           </p>
         )}
       </Card>
@@ -195,15 +223,24 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
       {/* ----- números do período ----- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-4">
         <Kpi label="Entradas" valor={entradas} antes={tot(antes, 'entradas')} bomSubir />
-        <Kpi label={filtrando ? 'Saídas (filtradas)' : 'Saídas'} valor={saidas} antes={tot(antes, 'saidas')} />
+        <Kpi label={`${semana ? `Saídas · Semana ${idxSem + 1}` : 'Saídas'}${filtrando ? ' (filtradas)' : ''}`} valor={saidas} antes={saidasAntes} />
         <Kpi label="Sobra" valor={sobra} antes={tot(antes, 'entradas') - tot(antes, 'saidasTotal')} bomSubir tom={sobra < 0 ? 'bad' : 'default'} />
         <Kpi label="Investido" valor={investido} antes={tot(antes, 'investido')} bomSubir extra={entradas > 0 ? `${Math.round((investido / entradas) * 100)}% das entradas` : undefined} />
-        <Kpi
-          label={filtrando ? 'Média mensal (filtrada)' : 'Média de saídas / mês'}
-          valor={saidas / meses.length}
-          antes={tot(antes, 'saidas') / meses.length}
-          className="col-span-2 lg:col-span-1"
-        />
+        {semana && semAntes ? (
+          <Kpi
+            label={filtrando ? 'Média por dia (filtrada)' : 'Saídas por dia na semana'}
+            valor={saidas / semana.dias}
+            antes={saidasAntes / semAntes.dias}
+            className="col-span-2 lg:col-span-1"
+          />
+        ) : (
+          <Kpi
+            label={filtrando ? 'Média mensal (filtrada)' : 'Média de saídas / mês'}
+            valor={saidas / meses.length}
+            antes={saidasAntes / meses.length}
+            className="col-span-2 lg:col-span-1"
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
@@ -211,19 +248,40 @@ export function Dashboard({ model, mes: ref, setMes: setRef }: { model: Model; m
         <Categorias
           itens={categorias}
           total={saidas}
-          temAnterior={antes.some((d) => d.itens.length > 0)}
+          temAnterior={itensAntes.length > 0}
           selecionada={f.categoria}
           onSelecionar={(c) => setF({ ...f, categoria: f.categoria === c ? '' : c })}
         />
         {meses.length > 1 && <MapaCategorias model={model} dados={atual} hojeMes={hojeMes} />}
+        {periodo === 'mes' && (
+          <div className="flex flex-col lg:col-span-2 [&>*]:flex-1">
+            <SemanasCard semanas={semanas} selecionada={semana?.inicio ?? null} onSelecionar={escolherSemana} filtrando={filtrando} />
+          </div>
+        )}
         <Reserva model={model} meses={mesesGrafico} selecionados={meses} hojeMes={hojeMes} />
-        <Maiores itens={maiores} model={model} />
+        <Maiores itens={maiores} model={model} largo={periodo === 'mes'} />
       </div>
     </div>
   )
 }
 
 // ---------- peças ----------
+
+function SemanaChip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={cx(
+        'shrink-0 rounded-full px-3 py-1.5 font-semibold whitespace-nowrap tabular-nums transition-colors',
+        ativo ? 'bg-primary-soft text-primary' : 'bg-soft text-muted hover:text-ink',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
 
 function NavBtn({ children, onClick, label }: { children: ReactNode; onClick: () => void; label: string }) {
   return (
@@ -598,9 +656,9 @@ function Reserva({ model, meses, selecionados, hojeMes }: { model: Model; meses:
   )
 }
 
-function Maiores({ itens, model }: { itens: Maior[]; model: Model }) {
+function Maiores({ itens, model, largo }: { itens: Maior[]; model: Model; largo?: boolean }) {
   return (
-    <Card className="lg:col-span-2">
+    <Card className={largo ? 'lg:col-span-3' : 'lg:col-span-2'}>
       <CardTitle extra={<span className="text-xs text-muted">parcelas e fixos somados no período</span>}>Maiores saídas do período</CardTitle>
       {itens.length === 0 ? (
         <Empty>Sem saídas no período.</Empty>

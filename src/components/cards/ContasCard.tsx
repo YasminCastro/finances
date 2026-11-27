@@ -24,7 +24,8 @@ export function ContasCard({
   const h = hoje()
 
   return (
-    <Card className="flex flex-col">
+    // no desktop não define a altura da linha (quem define é o card de saldo); a lista rola por dentro
+    <Card className="flex flex-col lg:h-0 lg:min-h-full">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-semibold">
@@ -78,7 +79,7 @@ export function ContasCard({
         </div>
       )}
 
-      <ul className="scroll-thin mt-2 divide-y divide-line lg:max-h-80 lg:overflow-y-auto lg:pr-1">
+      <ul className="scroll-thin mt-2 divide-y divide-line lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
         {visiveis.length === 0 && <Empty>Nada para pagar neste mês.</Empty>}
         {visiveis.map((c) => {
           const pago = !!c.pagamento
